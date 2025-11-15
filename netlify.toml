@@ -1,0 +1,16 @@
+[build]
+  command = "echo '🏗️ Starting build process...' && echo '🚀 Deploying Convex functions and building application...' && npx convex deploy --cmd 'pnpm build' && echo '🎉 Build completed successfully'"
+  publish = "dist/client"
+
+[build.environment]
+  NODE_VERSION = "24"
+  SECRETS_SCAN_OMIT_KEYS = "VITE_CONVEX_SITE_URL"
+
+# Deploy previews skip Convex deployment (use preview deployment instead)
+[context.deploy-preview]
+  command = "echo '🏗️ Building preview (skipping Convex deploy)...' && pnpm build && echo '🎉 Preview build completed successfully'"
+
+[[redirects]]
+  from = "/app/*"
+  to = "/index.html"
+  status = 200
