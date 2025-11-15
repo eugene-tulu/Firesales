@@ -19,8 +19,10 @@ import type * as dashboard from "../dashboard.js";
 import type * as dashboardStats from "../dashboardStats.js";
 import type * as emails from "../emails.js";
 import type * as firecrawl from "../firecrawl.js";
+import type * as flashSales from "../flashSales.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
+import type * as products from "../products.js";
 import type * as users from "../users.js";
 
 import type {
@@ -49,8 +51,10 @@ declare const fullApi: ApiFromModules<{
   dashboardStats: typeof dashboardStats;
   emails: typeof emails;
   firecrawl: typeof firecrawl;
+  flashSales: typeof flashSales;
   health: typeof health;
   http: typeof http;
+  products: typeof products;
   users: typeof users;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

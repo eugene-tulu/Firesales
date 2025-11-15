@@ -92,4 +92,101 @@ export default defineSchema({
   })
     .index('by_userId_createdAt', ['userId', 'createdAt'])
     .index('by_requestKey', ['requestKey']),
+
+  // FireSales tables
+  products: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    description: v.string(),
+    price: v.number(),
+    imageUrl: v.string(),
+    url: v.string(),
+    status: v.union(
+      v.literal('draft'),
+      v.literal('active'),
+      v.literal('paused'),
+      v.literal('sold_out'),
+      v.literal('ended'),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    publishedAt: v.optional(v.number()),
+  })
+    .index('by_userId', ['userId'])
+    .index('by_createdAt', ['createdAt'])
+    .index('by_status', ['status']),
+
+  inventory: defineTable({
+    productId: v.id('products'),
+    totalUnits: v.number(),
+    availableUnits: v.number(),
+    reservedUnits: v.number(),
+    soldUnits: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_productId', ['productId'])
+    .index('by_availableUnits', ['availableUnits']),
+
+  flashSales: defineTable({
+    productId: v.id('products'),
+    allocatedInventory: v.number(),
+    saleUrl: v.string(), // Unique URL for this flash sale
+    status: v.union(v.literal('draft'), v.literal('live'), v.literal('completed')),
+    userId: v.string(), // Seller ID
+    totalSales: v.number(),
+    totalRevenue: v.number(),
+    remainingInventory: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    startedAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+  })
+    .index('by_productId', ['productId'])
+    .index('by_saleUrl', ['saleUrl'])
+    .index('by_userId', ['userId'])
+    .index('by_status', ['status'])
+    .index('by_createdAt', ['createdAt']),
+
+  reservations: defineTable({
+    productId: v.id('products'),
+    userId: v.optional(v.string()), // Buyer ID (optional for anonymous reservations)
+    sessionId: v.string(), // Session identifier for anonymous users
+    status: v.union(
+      v.literal('reserved'),
+      v.literal('confirmed'),
+      v.literal('cancelled'),
+      v.literal('expired'),
+    ),
+    expiresAt: v.number(), // Reservation expiration time
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_productId', ['productId'])
+    .index('by_sessionId', ['sessionId'])
+    .index('by_status', ['status'])
+    .index('by_expiresAt', ['expiresAt']),
+
+  orders: defineTable({
+    productId: v.id('products'),
+    userId: v.optional(v.string()), // Buyer ID (optional for anonymous purchases)
+    sessionId: v.string(), // Session identifier for anonymous users
+    stripeSessionId: v.optional(v.string()),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('paid'),
+      v.literal('cancelled'),
+      v.literal('refunded'),
+    ),
+    amount: v.number(), // Total amount in cents
+    currency: v.string(),
+    quantity: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_productId', ['productId'])
+    .index('by_sessionId', ['sessionId'])
+    .index('by_stripeSessionId', ['stripeSessionId'])
+    .index('by_status', ['status'])
+    .index('by_createdAt', ['createdAt']),
 });

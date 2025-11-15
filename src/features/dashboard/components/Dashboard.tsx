@@ -1,8 +1,9 @@
 import type { api } from '@convex/_generated/api';
-import { useRouter } from '@tanstack/react-router';
+import { Link, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '~/components/PageHeader';
 import { Button } from '~/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { signOut } from '~/features/auth/auth-client';
 import { useAuth } from '~/features/auth/hooks/useAuth';
 import { MetricCard, SkeletonCard } from './MetricCard';
@@ -186,6 +187,19 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
 
       {/* Recent Activity */}
       <RecentActivity activities={activity || []} />
+
+      {/* Flash Sale Creation Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Create Flash Sale</CardTitle>
+          <CardDescription>Turn any product into a flash sale in 60 seconds</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild className="w-full">
+            <Link to="/app/flash-sales/create">🔥 Create Flash Sale</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
