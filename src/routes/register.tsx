@@ -1,7 +1,7 @@
 import { api } from '@convex/_generated/api';
 import { useForm } from '@tanstack/react-form';
 import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router';
-import { useQuery } from 'convex/react';
+import { useConvex, useQuery } from 'convex/react';
 import { Crown, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { z } from 'zod';
@@ -34,6 +34,7 @@ function RegisterPage() {
   const emailId = `${uid}-email`;
   const passwordId = `${uid}-password`;
   const { isAuthenticated, isPending } = useAuthState();
+  const convex = useConvex();
   const navigate = useNavigate();
   const router = useRouter();
 
@@ -129,6 +130,14 @@ function RegisterPage() {
           }
 
           if (data) {
+            // Ensure a profile exists for the newly created user
+            try {
+              await convex.action(api.auth.createProfileAfterSignup, {});
+            } catch (e) {
+              // Log but don't block sign-in flow
+              // eslint-disable-next-line no-console
+              console.error('Failed to create profile after signup:', e);
+            }
             // Invalidate router to refresh auth state
             await router.invalidate();
 

@@ -23,6 +23,7 @@ import type * as flashSales from "../flashSales.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as products from "../products.js";
+import type * as userProfiles from "../userProfiles.js";
 import type * as users from "../users.js";
 
 import type {
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   health: typeof health;
   http: typeof http;
   products: typeof products;
+  userProfiles: typeof userProfiles;
   users: typeof users;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

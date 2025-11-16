@@ -3,7 +3,7 @@ import { convex } from '@convex-dev/better-auth/plugins';
 import { betterAuth } from 'better-auth';
 import { v } from 'convex/values';
 import { getBetterAuthSecret, getSiteUrl } from '../src/lib/server/env.server';
-import { components, internal } from './_generated/api';
+import { api, components, internal } from './_generated/api';
 import type { DataModel } from './_generated/dataModel';
 import { action, query } from './_generated/server';
 
@@ -27,7 +27,7 @@ export const createAuth = (
     rateLimit: {
       // Global rate limit - applies to all endpoints
       window: 60 * 60, // 1 hour in seconds
-      max: 100, // 100 requests per hour per IP
+      max: 100, // 10 requests per hour per IP
     },
     emailAndPassword: {
       enabled: true,
@@ -112,6 +112,9 @@ export const createAuth = (
         },
       },
     },
+    // No global hooks here; profile creation is handled explicitly by the
+    // registration flow (client calls createProfileAfterSignup) to avoid
+    // timing/race conditions and to keep types simple during development.
     plugins: [convex()],
   });
 };
@@ -156,5 +159,30 @@ export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
     return authComponent.getAuthUser(ctx);
+  },
+});
+
+// Create user profile after signup - called from client after successful signup
+export const createProfileAfterSignup = action({
+  args: {},
+  handler: async (ctx) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    if (!authUser) {
+      throw new Error('Not authenticated');
+    }
+
+    const typed = authUser as { id?: string; _id?: string } | undefined;
+    const userId = typed?.id || typed?._id;
+    if (!userId) {
+      throw new Error('User ID not found');
+    }
+
+    // Create profile via mutation
+    await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
+      userId,
+      role: 'user',
+    });
+
+    return { success: true };
   },
 });

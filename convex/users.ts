@@ -202,7 +202,6 @@ export const getCurrentUserProfile = query({
   args: {},
   handler: async (ctx) => {
     // Get Better Auth user via authComponent
-    // Note: This should be cached by Convex since we're in an authenticated context
     let authUser: unknown;
     try {
       authUser = await authComponent.getAuthUser(ctx);
@@ -251,7 +250,7 @@ export const getCurrentUserProfile = query({
       email: authUserTyped.email || '',
       name: authUserTyped.name || null,
       phoneNumber: authUserTyped.phoneNumber || null,
-      role: profile?.role || 'user', // Default to 'user' if no profile exists
+      role: profile?.role || 'user', // Default to 'user' if no profile exists yet
       emailVerified: authUserTyped.emailVerified || false,
       createdAt,
       updatedAt,

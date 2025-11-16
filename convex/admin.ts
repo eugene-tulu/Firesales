@@ -6,6 +6,7 @@ import {
 import { assertUserId } from '../src/lib/shared/user-id';
 import { components, internal } from './_generated/api';
 import type { GenericCtx } from './_generated/server';
+import { mutation, query } from './_generated/server'; // ADD THIS LINE
 import { authComponent } from './auth';
 import { guarded } from './authz/guardFactory';
 
