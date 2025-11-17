@@ -1,6 +1,8 @@
 [build]
-  command = "echo '🏗️ Starting build process...' && echo '🚀 Deploying Convex functions and building application...' && npx convex deploy --cmd 'pnpm build' && echo '🎉 Build completed successfully'"
-  publish = "dist/client"
+  echo '🏗️ Starting build process...' \
+  && echo '🚀 Deploying Convex functions and building application...' \
+  && if [ -n "$CONVEX_TOKEN" ]; then npx convex deploy; else echo "Skipping convex deploy (no CONVEX_TOKEN)"; fi \
+  && echo '🎉 Build completed successfully'
 
 [build.environment]
   NODE_VERSION = "24"
