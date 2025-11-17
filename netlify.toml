@@ -1,5 +1,5 @@
 [build]
-  command = "echo '🏗️ Starting build process...' && echo '🚀 Deploying Convex functions and building application...' && npx convex deploy --cmd 'pnpm build' && echo '🎉 Build completed successfully'"
+  command = "bash -lc \"echo '🏗️ Starting build process...' && echo '🚀 Deploying Convex functions and building application...' && if [ -n \\\"$CONVEX_DEPLOYMENT_TOKEN\\\" ]; then npx convex deploy --token \\\"$CONVEX_DEPLOYMENT_TOKEN\\\" --cmd 'pnpm build'; else echo 'Skipping convex deploy: CONVEX_DEPLOYMENT_TOKEN not set' && pnpm build; fi && echo '🎉 Build completed successfully'\""
   publish = "dist/client"
 
 [build.environment]
@@ -8,7 +8,7 @@
 
 # Deploy previews skip Convex deployment
 [context.deploy-preview]
-  command = "echo '🏗️ Building preview (skipping Convex deploy)...' && pnpm build && echo '🎉 Preview build completed successfully'"
+ command = "bash -lc \"echo '🏗️ Building preview (skipping Convex deploy)...' && pnpm build && echo '🎉 Preview build completed successfully'\""
 
 [[redirects]]
   from = "/app/*"
