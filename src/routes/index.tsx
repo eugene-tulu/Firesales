@@ -6,7 +6,12 @@ export const Route = createFileRoute('/')({
   head: () => ({
     meta: [
       {
-        title: 'TanStack Start Template — Home',
+        title: 'Firesales - Launch High-Impact Flash Sales in Minutes',
+      },
+      {
+        name: 'description',
+        content:
+          'Firesales is the all-in-one platform for creating, managing, and optimizing flash sales. Scrape product details, set inventory, and launch sales that drive urgency and boost revenue.',
       },
     ],
   }),

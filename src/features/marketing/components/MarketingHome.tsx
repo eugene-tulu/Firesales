@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { ArrowRight, Monitor, Shield, Zap } from 'lucide-react';
+import { ArrowRight, Monitor, Shield, ShoppingCart, Timer, TrendingUp, Zap } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import React from 'react';
 import type { IconType } from 'react-icons';
@@ -136,31 +136,30 @@ export function MarketingHome() {
     <div className="flex flex-col gap-16 py-16">
       <section className="text-center space-y-6">
         <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
-          Free Open Source Template
+          Transform Your Sales Strategy
         </span>
         <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-          A production-ready starter template for TanStack Start
+          Launch High-Impact Flash Sales in Minutes
         </h1>
         <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
-          TanStack Start Template is a free, open-source starter that pairs modern tooling, auth,
-          and real-time data so you can focus on your product instead of plumbing. Server-first by
-          default, progressively enhanced for the richest user experiences.
+          Firesales is the all-in-one platform for creating, managing, and optimizing flash sales.
+          Scrape product details, set inventory, and launch sales that drive urgency and boost
+          revenue.
         </p>
         <p className="mx-auto max-w-2xl text-sm text-muted-foreground">
-          Explore a fully functional demo with dashboard analytics, AI playground (streaming text
-          generation, structured output, web scraping), admin user management, and profile
-          settings—all showcasing real-time data updates and production-ready patterns.
+          Perfect for e-commerce businesses, marketplaces, and retailers looking to create
+          time-sensitive promotions that generate buzz and increase conversion rates.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild size="lg">
             <Link to="/register" preload="intent" className="inline-flex items-center gap-2">
-              Explore the Demo
+              Start Your First Flash Sale
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg">
             <a
-              href="https://github.com/dyeoman2/tanstack-start-template"
+              href="https://github.com/eugene-tulu/Firesales"
               className="inline-flex items-center gap-2"
               target="_blank"
               rel="noopener noreferrer"
@@ -175,54 +174,97 @@ export function MarketingHome() {
       <section className="rounded-3xl border border-border bg-muted/40 p-10 shadow-sm">
         <div className="text-center space-y-3">
           <span className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-            Core Technology Stack
+            Powerful Flash Sale Features
           </span>
           <h2 className="text-3xl font-semibold text-foreground sm:text-4xl">
-            Pre-configured with a production-ready toolchain
+            Everything you need to run successful flash sales
           </h2>
           <p className="text-base text-muted-foreground">
-            Best-of-breed platforms wired together in this free, open-source template so teams can
-            ship quickly without compromising on reliability or developer experience.
+            From product scraping to inventory management, our platform streamlines the entire flash
+            sale process.
           </p>
         </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {coreTechnologies.map((tech) => {
-            const Icon = tech.Icon;
-            return (
-              <a
-                key={tech.name}
-                href={tech.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-4 rounded-2xl border border-border/60 bg-background px-4 py-4 shadow-sm transition-colors hover:bg-muted/50"
-              >
-                <div
-                  className="flex h-12 w-12 items-center justify-center rounded-full"
-                  aria-hidden
-                >
-                  <Icon className={cn('h-6 w-6', tech.iconClassName)} color={tech.iconColor} />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-base font-semibold text-foreground">{tech.name}</p>
-                  <p className="text-sm text-muted-foreground">{tech.description}</p>
-                </div>
-              </a>
-            );
-          })}
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex items-center gap-4 rounded-2xl border border-border/60 bg-background px-4 py-4 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <ShoppingCart className="h-6 w-6 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-foreground">Product Scraping</p>
+              <p className="text-sm text-muted-foreground">
+                Automatically extract product details from any URL
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-border/60 bg-background px-4 py-4 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <Timer className="h-6 w-6 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-foreground">Time-Sensitive Sales</p>
+              <p className="text-sm text-muted-foreground">
+                Create urgency with limited-time offers
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-border/60 bg-background px-4 py-4 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <TrendingUp className="h-6 w-6 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-foreground">Real-Time Analytics</p>
+              <p className="text-sm text-muted-foreground">
+                Track sales performance as they happen
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-border/60 bg-background px-4 py-4 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <Monitor className="h-6 w-6 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-foreground">Inventory Management</p>
+              <p className="text-sm text-muted-foreground">
+                Control stock levels and prevent overselling
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-border/60 bg-background px-4 py-4 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <Shield className="h-6 w-6 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-foreground">Secure Payments</p>
+              <p className="text-sm text-muted-foreground">
+                Process transactions safely with integrated payment systems
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-border/60 bg-background px-4 py-4 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <Zap className="h-6 w-6 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-foreground">Instant Activation</p>
+              <p className="text-sm text-muted-foreground">
+                Go live with your flash sale in seconds
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="rounded-3xl border border-border bg-linear-to-br from-primary/5 to-secondary/5 p-10 shadow-sm">
         <div className="text-center space-y-3 mb-10">
           <span className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-            Performance-First Architecture
+            Why Choose Firesales?
           </span>
           <h2 className="text-3xl font-semibold text-foreground sm:text-4xl">
-            Optimized for speed, security, and real-time experiences
+            The complete solution for modern flash sales
           </h2>
           <p className="text-base text-muted-foreground">
-            Built with modern web patterns that deliver exceptional performance while maintaining
-            strict security boundaries.
+            Built with modern web technologies to deliver exceptional performance and user
+            experience.
           </p>
         </div>
 
@@ -231,11 +273,10 @@ export function MarketingHome() {
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
               <Zap className="h-6 w-6 text-primary" />
             </div>
-            <h3 className="text-xl font-semibold text-foreground">SSG for Public Pages</h3>
+            <h3 className="text-xl font-semibold text-foreground">Lightning Fast Setup</h3>
             <p className="text-muted-foreground">
-              Marketing and authentication routes render as static HTML for instant first paint and
-              optimal SEO. No JavaScript required for initial page loads, with progressive
-              enhancement for rich interactions.
+              Create and launch a flash sale in under 60 seconds. Just provide a product URL, set
+              your inventory, and go live. No complex setup required.
             </p>
           </div>
 
@@ -243,13 +284,10 @@ export function MarketingHome() {
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
               <Monitor className="h-6 w-6 text-primary" />
             </div>
-            <h3 className="text-xl font-semibold text-foreground">
-              SPA Mode for Authenticated Pages
-            </h3>
+            <h3 className="text-xl font-semibold text-foreground">Real-Time Updates</h3>
             <p className="text-muted-foreground">
-              Application routes run as a single-page app with Convex real-time queries. Zero
-              waterfalls, instant updates, and seamless navigation between protected areas of your
-              application.
+              Watch inventory levels update instantly as customers purchase. Get real-time analytics
+              on sales performance and customer engagement.
             </p>
           </div>
 
@@ -257,13 +295,35 @@ export function MarketingHome() {
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
               <Shield className="h-6 w-6 text-primary" />
             </div>
-            <h3 className="text-xl font-semibold text-foreground">Universal RBAC Infrastructure</h3>
+            <h3 className="text-xl font-semibold text-foreground">Enterprise-Grade Security</h3>
             <p className="text-muted-foreground">
-              Role-based access control enforced on both client and server with minimal database
-              hits. Single capability map drives all authorization, with automatic cache
-              invalidation for real-time role updates.
+              All transactions and data are protected with industry-standard security measures. Your
+              customer information is always safe and secure.
             </p>
           </div>
+        </div>
+      </section>
+
+      <section className="text-center space-y-6">
+        <h2 className="text-3xl font-semibold text-foreground sm:text-4xl">
+          Ready to boost your sales?
+        </h2>
+        <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
+          Join thousands of businesses using Firesales to create high-converting flash sales that
+          drive revenue and customer engagement.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Button asChild size="lg">
+            <Link to="/register" preload="intent" className="inline-flex items-center gap-2">
+              Get Started Free
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="lg">
+            <Link to="/login" preload="intent">
+              Sign In to Dashboard
+            </Link>
+          </Button>
         </div>
       </section>
     </div>
