@@ -1,3 +1,4 @@
+import { api } from '@convex/_generated/api';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery } from 'convex/react';
 import { Copy, ExternalLink } from 'lucide-react';
@@ -6,7 +7,6 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
-import { api } from '~/convex/_generated/api';
 
 export const Route = createFileRoute('/dashboard/flash-sales/$saleId')({
   component: FlashSaleDetail,
@@ -18,13 +18,13 @@ function FlashSaleDetail() {
   const goLive = useMutation(api.flashSales.goLive);
   const [copied, setCopied] = useState(false);
 
-  const sale = flashSales?.find((s) => s._id === saleId);
+  const sale = flashSales?.find((s: any) => s._id === saleId);
 
   if (!sale) {
     return <div className="p-8">Loading...</div>;
   }
 
-  const saleUrl = `${window.location.origin}/live/${sale.saleUrl}`;
+  const saleUrl = `/live/${sale.saleUrl}`;
 
   const handleGoLive = async () => {
     await goLive({ flashSaleId: sale._id });
