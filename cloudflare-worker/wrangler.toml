@@ -1,0 +1,14 @@
+name = "firesales-inventory"
+main = "./inventory-worker.ts"
+compatibility_date = "2023-12-01"
+
+[vars]
+CLOUDFLARE_WORKER_TOKEN = "your-worker-token-here"
+
+[[durable_objects.bindings]]
+name = "INVENTORY_DO"
+class_name = "InventoryDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["InventoryDO"]

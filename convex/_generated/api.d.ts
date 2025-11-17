@@ -22,7 +22,11 @@ import type * as firecrawl from "../firecrawl.js";
 import type * as flashSales from "../flashSales.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
+import type * as inventory from "../inventory.js";
+import type * as orders from "../orders.js";
+import type * as payments from "../payments.js";
 import type * as products from "../products.js";
+import type * as reservations from "../reservations.js";
 import type * as userProfiles from "../userProfiles.js";
 import type * as users from "../users.js";
 
@@ -55,7 +59,11 @@ declare const fullApi: ApiFromModules<{
   flashSales: typeof flashSales;
   health: typeof health;
   http: typeof http;
+  inventory: typeof inventory;
+  orders: typeof orders;
+  payments: typeof payments;
   products: typeof products;
+  reservations: typeof reservations;
   userProfiles: typeof userProfiles;
   users: typeof users;
 }>;

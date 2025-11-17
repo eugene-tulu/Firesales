@@ -152,6 +152,7 @@ export default defineSchema({
     productId: v.id('products'),
     userId: v.optional(v.string()), // Buyer ID (optional for anonymous reservations)
     sessionId: v.string(), // Session identifier for anonymous users
+    quantity: v.number(), // Quantity being reserved
     status: v.union(
       v.literal('reserved'),
       v.literal('confirmed'),
