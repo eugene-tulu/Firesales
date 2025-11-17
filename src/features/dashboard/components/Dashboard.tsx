@@ -196,7 +196,7 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
         </CardHeader>
         <CardContent>
           <Button asChild className="w-full">
-            <Link to="/app/flash-sales/create">🔥 Create Flash Sale</Link>
+            <Link to="/app/flashSales/create">🔥 Create Flash Sale</Link>
           </Button>
         </CardContent>
       </Card>
