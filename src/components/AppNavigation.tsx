@@ -28,15 +28,25 @@ function AuthNavigation({ currentPath }: { currentPath: string }) {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
-      // Invalidate the root route loader which caches auth state
-      // Convex handles auth state automatically, so no need for React Query invalidation
+      // Call signOut from Better Auth client
+      await signOut({
+        fetchOptions: {
+          // Increase timeout and handle potential network issues
+          signal: AbortSignal.timeout(1000), // 10 second timeout
+        },
+      });
+      // Invalidate the router to clear cached auth state
       await router.invalidate();
+      // Navigate to home page after sign out
       navigate({ to: '/' });
     } catch (error) {
       console.error('❌ NAVIGATION: Error signing out:', error);
-      // Still try to invalidate even on error
-      await router.invalidate();
+      // Still navigate to home even if signOut fails to avoid stuck auth state
+      try {
+        await router.invalidate();
+      } catch (invalidateError) {
+        console.error('Error invalidating router:', invalidateError);
+      }
       navigate({ to: '/' });
     }
   };

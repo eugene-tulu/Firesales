@@ -50,7 +50,12 @@ export async function routeAdminGuard({
       if (import.meta.env.DEV) {
         console.error('[routeAdminGuard] Auth check timed out:', location.pathname);
       }
-      throw redirect({ to: '/login', search: { redirect: location.href } });
+      // Only redirect to login if not already on a login-related page to avoid redirect loops
+      if (location.pathname.startsWith('/login') || location.pathname.startsWith('/register')) {
+        throw redirect({ to: '/login' });
+      } else {
+        throw redirect({ to: '/login', search: { redirect: location.href } });
+      }
     }
 
     // Check if this is an authentication error (user not authenticated)

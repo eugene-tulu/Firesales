@@ -20,7 +20,12 @@ function AppLayout() {
   const { isAuthenticated, isPending, error } = useAuth();
   const redirectRef = useRef(false);
   const redirectTimerRef = useRef<number | null>(null);
-  const redirectTarget = location.href ?? '/app';
+  // Use the current pathname as redirect target, but avoid redirect loops
+  const currentPath = location.pathname + location.search;
+  const redirectTarget =
+    currentPath.startsWith('/login') || currentPath.startsWith('/register') || currentPath === '/'
+      ? '/app'
+      : currentPath;
 
   useEffect(() => {
     // Only perform redirect logic when auth state is no longer pending
