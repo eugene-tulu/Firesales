@@ -18,6 +18,7 @@ const handler = createStartHandler(async ({ request, router, responseHeaders }) 
   // Set Document-Policy header to enable browser profiling
   responseHeaders.set('Document-Policy', 'js-profiling');
 
+  // Use the default render handler which should support Suspense properly
   return defaultRenderHandler({ request, router, responseHeaders });
 });
 

@@ -65,7 +65,7 @@ export function useAuth(options: AuthOptions = {}): AuthResult {
       isAuthenticated: authState.isAuthenticated,
       isAdmin: role === USER_ROLES.ADMIN,
       isPending,
-      error,
+      error: error || (shouldFetchProfile && profileQuery?.error ? profileQuery.error : null),
     }),
     [
       session?.user,
@@ -74,6 +74,7 @@ export function useAuth(options: AuthOptions = {}): AuthResult {
       authState.isAuthenticated,
       isPending,
       error,
+      profileQuery?.error,
       shouldFetchProfile,
     ],
   );

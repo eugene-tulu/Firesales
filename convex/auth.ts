@@ -151,14 +151,25 @@ export const rateLimitAction = action({
     }
 
     const { token: _token, ...rateLimitArgs } = args;
-    return await ctx.runMutation(components.rateLimiter.lib.rateLimit, rateLimitArgs);
+    try {
+      return await ctx.runMutation(components.rateLimiter.lib.rateLimit, rateLimitArgs);
+    } catch (error) {
+      console.error('Rate limit action failed:', error);
+      // Return a safe default in case of rate limiter failure
+      return { ok: true, retryAfter: 0 };
+    }
   },
 });
 
 export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    return authComponent.getAuthUser(ctx);
+    try {
+      return await authComponent.getAuthUser(ctx);
+    } catch (error) {
+      console.error('Failed to get current user:', error);
+      return null;
+    }
   },
 });
 
@@ -166,23 +177,46 @@ export const getCurrentUser = query({
 export const createProfileAfterSignup = action({
   args: {},
   handler: async (ctx) => {
-    const authUser = await authComponent.getAuthUser(ctx);
-    if (!authUser) {
-      throw new Error('Not authenticated');
+    // Try multiple times with small delays to account for session propagation
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const authUser = await authComponent.getAuthUser(ctx);
+        if (authUser) {
+          const typed = authUser as { id?: string; _id?: string } | undefined;
+          const userId = typed?.id || typed?._id;
+          if (!userId) {
+            throw new Error('User ID not found');
+          }
+
+          // Check if profile already exists to avoid duplicates
+          const existingProfile = await ctx.runQuery(api.users.getCurrentUserProfile);
+          if (existingProfile) {
+            return { success: true, message: 'Profile already exists' };
+          }
+
+          // Check if this is the first user in the system to assign admin role
+          const userCountResult = await ctx.runQuery(api.users.getUserCount, {});
+          const isFirstUser = userCountResult.isFirstUser;
+
+          // Create profile via mutation with appropriate role
+          await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
+            userId,
+            role: isFirstUser ? 'admin' : 'user',
+          });
+
+          return { success: true, message: 'Profile created successfully' };
+        }
+      } catch (error) {
+        if (attempt === 4) {
+          // Last attempt
+          console.error('Failed to create profile after multiple attempts:', error);
+          throw error;
+        }
+        // Wait a bit before retrying - increase delay for better reliability
+        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+      }
     }
 
-    const typed = authUser as { id?: string; _id?: string } | undefined;
-    const userId = typed?.id || typed?._id;
-    if (!userId) {
-      throw new Error('User ID not found');
-    }
-
-    // Create profile via mutation
-    await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
-      userId,
-      role: 'user',
-    });
-
-    return { success: true };
+    throw new Error('Not authenticated after multiple attempts');
   },
 });

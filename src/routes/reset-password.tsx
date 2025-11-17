@@ -12,7 +12,6 @@ import { useAuth } from '~/features/auth/hooks/useAuth';
 import { useAuthState } from '~/features/auth/hooks/useAuthState';
 
 export const Route = createFileRoute('/reset-password')({
-  staticData: true,
   component: ResetPasswordPage,
   pendingComponent: AuthSkeleton,
   validateSearch: z.object({

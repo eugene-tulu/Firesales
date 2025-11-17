@@ -138,23 +138,11 @@ export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
       if (signUpResult?.user?.id) {
         const roleToSet = isFirstUser ? USER_ROLES.ADMIN : USER_ROLES.USER;
 
-        // Small delay to ensure Better Auth user is committed to Convex database
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // Delay to ensure Better Auth user is committed to Convex database
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-        try {
-          // Store role in userProfiles table (app-specific data)
-          // Use allowBootstrap flag for first admin user creation
-          await fetchMutation(api.users.setUserRole, {
-            userId: signUpResult.user.id,
-            role: roleToSet,
-            allowBootstrap: isFirstUser, // Allow bootstrap for first admin
-          });
-        } catch (roleError) {
-          // Log but don't fail signup if role update fails
-          // Role can be set manually later if needed
-          console.warn('[Signup] Failed to set user role after creation:', roleError);
-          // Continue with signup success - role update is non-critical
-        }
+        // Role assignment will be handled by the createProfileAfterSignup action
+        // which is called after successful signup in the register route
       }
 
       return {

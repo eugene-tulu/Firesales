@@ -1,7 +1,7 @@
 import { api } from '@convex/_generated/api';
 import { useForm } from '@tanstack/react-form';
 import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router';
-import { useConvex, useQuery } from 'convex/react';
+import { useAction, useQuery } from 'convex/react';
 import { Crown, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { z } from 'zod';
@@ -15,7 +15,6 @@ import { useAuthState } from '~/features/auth/hooks/useAuthState';
 import { signUpWithFirstAdminServerFn } from '~/features/auth/server/user-management';
 
 export const Route = createFileRoute('/register')({
-  staticData: true,
   errorComponent: () => <div>Something went wrong</div>,
   component: RegisterPage,
   pendingComponent: AuthSkeleton,
@@ -34,9 +33,11 @@ function RegisterPage() {
   const emailId = `${uid}-email`;
   const passwordId = `${uid}-password`;
   const { isAuthenticated, isPending } = useAuthState();
-  const convex = useConvex();
   const navigate = useNavigate();
   const router = useRouter();
+
+  // Use useAction hook for calling Convex actions
+  const createProfileAfterSignup = useAction(api.auth.createProfileAfterSignup);
 
   // Use Convex query directly instead of server function wrapper
   const userCountResult = useQuery(api.users.getUserCount, {});
@@ -108,17 +109,11 @@ function RegisterPage() {
 
         // Automatically sign in the user after successful registration
         try {
-          const { data, error: signInError } = await signIn.email(
-            {
-              email: result.userCredentials.email,
-              password,
-              rememberMe: true,
-            },
-            {
-              onSuccess: () => undefined,
-              onError: () => undefined,
-            },
-          );
+          const { data, error: signInError } = await signIn.email({
+            email: result.userCredentials.email,
+            password,
+            rememberMe: true,
+          });
 
           if (signInError) {
             setSuccessMessage(`${result.message} Please sign in to continue.`);
@@ -130,9 +125,12 @@ function RegisterPage() {
           }
 
           if (data) {
+            // Wait for session to propagate before creating profile
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
             // Ensure a profile exists for the newly created user
             try {
-              await convex.action(api.auth.createProfileAfterSignup, {});
+              await createProfileAfterSignup({});
             } catch (e) {
               // Log but don't block sign-in flow
               // eslint-disable-next-line no-console

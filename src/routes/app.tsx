@@ -17,13 +17,15 @@ export const Route = createFileRoute('/app')({
 function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, isPending } = useAuth();
+  const { isAuthenticated, isPending, error } = useAuth();
   const redirectRef = useRef(false);
   const redirectTimerRef = useRef<number | null>(null);
   const redirectTarget = location.href ?? '/app';
 
   useEffect(() => {
+    // Only perform redirect logic when auth state is no longer pending
     if (isPending) {
+      // Clear any existing redirect timer when pending
       if (redirectTimerRef.current !== null) {
         window.clearTimeout(redirectTimerRef.current);
         redirectTimerRef.current = null;
@@ -31,7 +33,9 @@ function AppLayout() {
       return;
     }
 
+    // Auth state is initialized, now check authentication
     if (!isAuthenticated) {
+      // Only set redirect timer if not already set
       if (redirectTimerRef.current === null) {
         redirectTimerRef.current = window.setTimeout(() => {
           redirectTimerRef.current = null;
@@ -51,6 +55,7 @@ function AppLayout() {
         }, 400);
       }
     } else {
+      // User is authenticated, clear any redirect timer and reset flag
       if (redirectTimerRef.current !== null) {
         window.clearTimeout(redirectTimerRef.current);
         redirectTimerRef.current = null;
@@ -61,6 +66,7 @@ function AppLayout() {
   }, [isAuthenticated, isPending, navigate, redirectTarget]);
 
   useEffect(() => {
+    // Cleanup timer on unmount
     return () => {
       if (redirectTimerRef.current !== null) {
         window.clearTimeout(redirectTimerRef.current);
@@ -69,6 +75,7 @@ function AppLayout() {
     };
   }, []);
 
+  // Show skeleton while auth state is initializing
   if (isPending || !isAuthenticated) {
     return <AppLayoutSkeleton />;
   }

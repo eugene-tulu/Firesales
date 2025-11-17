@@ -15,7 +15,6 @@ import { authClient } from '~/features/auth/auth-client';
 import { useAuthState } from '~/features/auth/hooks/useAuthState';
 
 export const Route = createFileRoute('/forgot-password')({
-  staticData: true,
   component: ForgotPasswordPage,
   errorComponent: () => <div>Something went wrong</div>,
   pendingComponent: AuthSkeleton,

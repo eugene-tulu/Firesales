@@ -17,16 +17,16 @@ export async function routeAdminGuard({
     );
 
     const authPromise = getCurrentUserServerFn();
-    const { user } = await Promise.race([authPromise, timeoutPromise]);
+    const result = await Promise.race([authPromise, timeoutPromise]);
 
     // Use capability-based checking for consistency with the RBAC system
     const adminCapability: Capability = 'route:/app/admin';
     const allowedRoles = Caps[adminCapability] ?? [];
 
-    if (!user?.role || !(allowedRoles as readonly string[]).includes(user.role)) {
+    if (!result.user?.role || !(allowedRoles as readonly string[]).includes(result.user.role)) {
       if (import.meta.env.DEV) {
         console.warn('[routeAdminGuard] Access denied:', {
-          userRole: user?.role,
+          userRole: result.user?.role,
           requiredRoles: allowedRoles,
           path: location.pathname,
         });
@@ -34,7 +34,7 @@ export async function routeAdminGuard({
       throw redirect({ to: '/login', search: { reset: '', redirect: location.href } });
     }
 
-    return { authenticated: true as const, user };
+    return { authenticated: true as const, user: result.user };
   } catch (error) {
     // Enhanced error logging in development
     if (import.meta.env.DEV) {
@@ -43,6 +43,20 @@ export async function routeAdminGuard({
         path: location.pathname,
         href: location.href,
       });
+    }
+
+    // Check if this is a timeout error
+    if (error instanceof Error && error.message === 'Auth check timeout') {
+      if (import.meta.env.DEV) {
+        console.error('[routeAdminGuard] Auth check timed out:', location.pathname);
+      }
+      throw redirect({ to: '/login', search: { redirect: location.href } });
+    }
+
+    // Check if this is an authentication error (user not authenticated)
+    if (error instanceof Error && error.message.includes('redirect')) {
+      // This is likely a redirect from requireAuth, so re-throw it
+      throw error;
     }
 
     // Re-throw redirects as-is, wrap other errors

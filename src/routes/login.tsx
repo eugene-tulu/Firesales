@@ -1,5 +1,7 @@
+import { api } from '@convex/_generated/api';
 import { useForm } from '@tanstack/react-form';
 import { createFileRoute, Link, redirect, useNavigate, useRouter } from '@tanstack/react-router';
+import { useAction } from 'convex/react';
 import { Lock, Mail } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { z } from 'zod';
@@ -11,7 +13,6 @@ import { signIn } from '~/features/auth/auth-client';
 import { useAuthState } from '~/features/auth/hooks/useAuthState';
 
 export const Route = createFileRoute('/login')({
-  staticData: true,
   component: LoginPage,
   errorComponent: () => <div>Something went wrong</div>,
   pendingComponent: AuthSkeleton,
@@ -56,6 +57,9 @@ function LoginPage() {
   const router = useRouter();
   const { isAuthenticated, isPending } = useAuthState();
 
+  // Define the action hook at the component level
+  const createProfileAfterSignup = useAction(api.auth.createProfileAfterSignup);
+
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const emailId = useId();
@@ -93,17 +97,11 @@ function LoginPage() {
       }
 
       try {
-        const { data, error: signInError } = await signIn.email(
-          {
-            email: value.email,
-            password: value.password,
-            rememberMe: true,
-          },
-          {
-            onSuccess: () => undefined,
-            onError: () => undefined,
-          },
-        );
+        const { data, error: signInError } = await signIn.email({
+          email: value.email,
+          password: value.password,
+          rememberMe: true,
+        });
 
         if (signInError) {
           if (signInError.status === 403) {
@@ -118,10 +116,20 @@ function LoginPage() {
 
         if (data) {
           await router.invalidate();
-          // Small delay to ensure invalidation settles before navigation
-          setTimeout(() => {
-            navigate({ to: redirectTarget });
-          }, 50);
+
+          // Wait for session propagation before continuing
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Create user profile if it doesn't exist, but don't block login
+          createProfileAfterSignup({})
+            .then(() => console.log('Profile created successfully'))
+            .catch((profileError) => {
+              console.error('Failed to create profile after sign-in:', profileError);
+              // Don't show error to user - profile creation shouldn't block login
+            });
+
+          // Navigate to redirect target
+          navigate({ to: redirectTarget });
         } else {
           setError('An unexpected error occurred. Please try again.');
         }
@@ -197,14 +205,7 @@ function LoginPage() {
             Sign in to your account
           </h2>
         </div>
-        <form
-          className="mt-8 space-y-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            form.handleSubmit();
-          }}
-        >
+        <form className="mt-8 space-y-6" onSubmit={form.handleSubmit}>
           {successMessage && (
             <div className="bg-primary/10 border border-primary/20 text-primary px-4 py-3 rounded">
               {successMessage}

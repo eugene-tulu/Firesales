@@ -108,7 +108,18 @@ function AuthProvider({ children }: AuthProviderProps) {
 
   // Setup claim refresh when component mounts
   useEffect(() => {
-    return setupClaimRefresh();
+    // Only set up claim refresh if not on auth pages
+    const isAuthPage = () => {
+      const currentPath = window.location.pathname;
+      return ['/login', '/register', '/forgot-password', '/reset-password'].some((authPath) =>
+        currentPath.startsWith(authPath),
+      );
+    };
+
+    if (!isAuthPage()) {
+      return setupClaimRefresh();
+    }
+    return () => {};
   }, []);
 
   return (
