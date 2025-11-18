@@ -43,6 +43,10 @@ async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     const { fetchQuery } = await setupFetchClient(createAuth, getCookie);
     const profile = await fetchQuery(api.users.getCurrentUserProfile, {});
 
+    if (!profile) {
+      return null;
+    }
+
     const sessionUserId = normalizeUserId(profile);
     if (!sessionUserId) {
       return null;
@@ -60,7 +64,8 @@ async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       role: profile?.role === USER_ROLES.ADMIN ? USER_ROLES.ADMIN : USER_ROLES.USER,
       name: typeof profile?.name === 'string' ? profile.name : undefined,
     };
-  } catch {
+  } catch (error) {
+    console.error('Error in getCurrentUser:', error);
     return null;
   }
 }

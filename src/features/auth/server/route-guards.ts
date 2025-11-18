@@ -104,6 +104,7 @@ const getCurrentUserServerFn = createServerFn({ method: 'GET' }).handler(
       if (import.meta.env.DEV) {
         console.error('[getCurrentUserServerFn] Failed to get user:', error);
       }
+      // Don't throw here - let the route guard handle the auth failure
       throw error; // Re-throw to let the route guard handle it
     }
   },

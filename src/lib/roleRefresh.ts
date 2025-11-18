@@ -54,9 +54,13 @@ export function setupClaimRefresh(maxAgeMs = 20 * 60_000) {
 
       const userObj = user as Record<string, unknown>;
       const lastRefreshedAt =
-        typeof userObj.lastRefreshedAt === 'number' ? userObj.lastRefreshedAt : 0;
+        typeof userObj._accessTokenIssuedAt === 'number'
+          ? userObj._accessTokenIssuedAt
+          : typeof userObj.lastRefreshedAt === 'number'
+            ? userObj.lastRefreshedAt
+            : 0;
 
-      if (Date.now() - lastRefreshedAt > maxAgeMs) {
+      if (Date.now() - lastRefreshedAt * 1000 > maxAgeMs) {
         // Only refresh if we have a stable session
         if (hasStableSession) {
           await authClient.getSession();

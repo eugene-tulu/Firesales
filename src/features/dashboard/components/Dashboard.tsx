@@ -179,7 +179,7 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
 
         {/* New User Button */}
         {stats ? (
-          <MetricCard title="Recent Signups" value={stats.recentSignups.toString()} />
+          <MetricCard title="Recent Signups" value={stats.recentSignups?.toString() ?? '0'} />
         ) : (
           <SkeletonCard title="Recent Signups" />
         )}
