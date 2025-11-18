@@ -6,6 +6,22 @@
   NODE_VERSION = "24"
   SECRETS_SCAN_OMIT_KEYS = "VITE_CONVEX_SITE_URL,VITE_CONVEX_URL,VITE_AUTUMN_50_CREDITS_ID,RESEND_EMAIL_SENDER,S3_ACCESS_KEY_ID,S3_PUBLIC_URL,S3_REGION,S3_BUCKET_NAME,S3_ENDPOINT,S3_SECRET_ACCESS_KEY,APP_NAME"
 
+[context.production.environment]
+  BETTER_AUTH_URL = "https://$NETLIFY_URL"
+  NEXT_PUBLIC_SITE_URL = "https://$NETLIFY_URL"
+  SITE_URL = "https://$NETLIFY_URL"
+  PUBLIC_SITE_URL = "https://$NETLIFY_URL"
+  APP_URL = "https://$NETLIFY_URL"
+  URL = "https://$NETLIFY_URL"
+
+[context.deploy-preview.environment]
+  BETTER_AUTH_URL = "https://$DEPLOY_PRIME_URL"
+  NEXT_PUBLIC_SITE_URL = "https://$DEPLOY_PRIME_URL"
+  SITE_URL = "https://$DEPLOY_PRIME_URL"
+  PUBLIC_SITE_URL = "https://$DEPLOY_PRIME_URL"
+  APP_URL = "https://$DEPLOY_PRIME_URL"
+  URL = "https://$DEPLOY_PRIME_URL"
+
 # Deploy previews skip Convex deployment
 [context.deploy-preview]
  command = "bash -lc \"echo '🏗️ Building preview (skipping Convex deploy)...' && pnpm build && echo '🎉 Preview build completed successfully'\""
@@ -14,3 +30,11 @@
   from = "/app/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://js.stripe.com https://checkout.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com https://*.stripe.com https://api.resend.com https://*.resend.com https://api.convex.cloud https://*.convex.cloud; frame-src https://js.stripe.com https://checkout.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
