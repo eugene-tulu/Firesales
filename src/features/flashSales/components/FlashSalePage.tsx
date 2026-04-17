@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { api } from '../../../convex/_generated/api';
 import type { Id } from '../../../convex/_generated/dataModel';
 import { useAuth } from '../../auth/hooks/useAuth';
+import { PaymentForm } from './PaymentForm';
 
 interface Product {
   _id: Id<'products'>;
@@ -39,8 +40,8 @@ interface FlashSale {
 
 export function FlashSalePage({ saleId }: { saleId: string }) {
   const [quantity, setQuantity] = useState(1);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [reservationId, setReservationId] = useState<string | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   const { isAuthenticated, user } = useAuth();
 
@@ -49,78 +50,67 @@ export function FlashSalePage({ saleId }: { saleId: string }) {
   const product = flashSale?.product;
 
   // Mutations
-  const [createPaymentIntent, createPaymentIntentStatus] = useMutation(
-    api.payments.createPaymentIntent,
-  );
-  const [confirmPaymentAndCreateOrder, confirmPaymentStatus] = useMutation(
-    api.payments.confirmPaymentAndCreateOrder,
-  );
+  const reserveInventory = useMutation(api.inventory.reserve);
+  const createCheckoutSession = useMutation(api.payments.createCheckoutSession);
+
+  // Generate a session ID for anonymous users
+  const sessionId =
+    isAuthenticated && user?.id
+      ? user.id
+      : `session_${typeof window !== 'undefined' ? sessionStorage.getItem('sessionId') : ''}_${Date.now()}`;
 
   // Handle quantity change
   const handleQuantityChange = (change: number) => {
     if (flashSale) {
       const newQuantity = quantity + change;
-      // Ensure quantity doesn't exceed remaining inventory
       if (newQuantity >= 1 && newQuantity <= flashSale.remainingInventory) {
         setQuantity(newQuantity);
       }
     }
   };
 
-  // Handle purchase
-  const handlePurchase = async () => {
+  // Reserve inventory and proceed to checkout
+  const handleReserveAndCheckout = async () => {
     if (!flashSale || !product) return;
 
-    setIsProcessing(true);
-
     try {
-      // Create a payment intent with inventory reservation
-      const result = await createPaymentIntent({
+      // Reserve inventory atomically via Cloudflare
+      const reservationResult = await reserveInventory({
         productId: product._id,
-        quantity,
-        amount: Math.round(product.price * quantity * 100), // Convert to cents
-        currency: 'usd',
-        sessionId: isAuthenticated ? user?.id || 'anonymous' : `session_${Date.now()}`,
-        customerEmail: isAuthenticated ? user?.email : undefined,
+        quantity: quantity,
+        sessionId: sessionId,
       });
 
-      if (result.success && result.reservationId) {
-        setReservationId(result.reservationId);
-      } else {
-        throw new Error(result.error || 'Failed to create payment intent');
+      if (!reservationResult.reservationId) {
+        throw new Error('Failed to reserve inventory. It may have just been sold out.');
       }
+
+      setReservationId(reservationResult.reservationId);
     } catch (error) {
-      console.error('Error initiating purchase:', error);
-      alert(error instanceof Error ? error.message : 'An error occurred during purchase');
-    } finally {
-      setIsProcessing(false);
+      console.error('Error reserving inventory:', error);
+      alert(
+        error instanceof Error ? error.message : 'Failed to reserve inventory. Please try again.',
+      );
     }
   };
 
-  // Handle payment confirmation
-  const handleConfirmPayment = async (paymentIntentId: string) => {
-    if (!reservationId || !flashSale) return;
+  // Handle successful checkout return (user returns from Dodo)
+  useEffect(() => {
+    if (!checkoutUrl) return;
 
-    try {
-      const result = await confirmPaymentAndCreateOrder({
-        paymentIntentId,
-        reservationId,
-        sessionId: isAuthenticated ? user?.id || 'anonymous' : `session_${Date.now()}`,
-      });
+    // Check if we returned from Dodo with a success indicator
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get('success');
+    const cartId = urlParams.get('cart_id');
 
-      if (result.success) {
-        alert('Purchase completed successfully!');
-        // Reset the state to show product again
-        setReservationId(null);
-        setQuantity(1);
-      } else {
-        throw new Error(result.error || 'Payment confirmation failed');
-      }
-    } catch (error) {
-      console.error('Error confirming payment:', error);
-      alert(error instanceof Error ? error.message : 'An error occurred confirming payment');
+    if (success === 'true' && cartId) {
+      // Payment was successful - order created via webhook
+      // Show success message or redirect to orders
+      alert('Payment completed successfully! Your order is being processed.');
+      // Could redirect to order confirmation page
+      // navigate({ to: '/orders' });
     }
-  };
+  }, [checkoutUrl]);
 
   // Render purchase flow
   if (flashSale && !reservationId) {
@@ -148,7 +138,7 @@ export function FlashSalePage({ saleId }: { saleId: string }) {
                   <div>
                     <h2 className="text-2xl font-bold">${product?.price.toFixed(2)}</h2>
                     <p className="text-gray-500 line-through">
-                      ${(product?.price * 1.5).toFixed(2)} {/* Original price example */}
+                      ${(product?.price * 1.5).toFixed(2)}
                     </p>
                   </div>
 
@@ -180,22 +170,16 @@ export function FlashSalePage({ saleId }: { saleId: string }) {
 
                   <div className="pt-4">
                     <Button
-                      onClick={handlePurchase}
-                      disabled={
-                        isProcessing ||
-                        flashSale.remainingInventory === 0 ||
-                        flashSale.status !== 'live'
-                      }
+                      onClick={handleReserveAndCheckout}
+                      disabled={flashSale.remainingInventory === 0 || flashSale.status !== 'live'}
                       className="w-full"
                       size="lg"
                     >
-                      {isProcessing
-                        ? 'Processing...'
-                        : flashSale.remainingInventory === 0
-                          ? 'Sold Out'
-                          : flashSale.status !== 'live'
-                            ? 'Sale Not Active'
-                            : `Buy Now - $${(product?.price * quantity).toFixed(2)}`}
+                      {flashSale.remainingInventory === 0
+                        ? 'Sold Out'
+                        : flashSale.status !== 'live'
+                          ? 'Sale Not Active'
+                          : `Buy Now - $${(product?.price * quantity).toFixed(2)}`}
                     </Button>
                   </div>
                 </div>
@@ -213,54 +197,18 @@ export function FlashSalePage({ saleId }: { saleId: string }) {
     );
   }
 
-  // Render payment form after reservation (this would be handled by a payment form component)
+  // Render payment form after reservation
   if (reservationId && flashSale && product) {
-    // For now, we'll show a placeholder - in a real implementation this would be a Stripe payment form
     return (
       <div className="container mx-auto py-10">
         <div className="max-w-2xl mx-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle>Complete Your Purchase</CardTitle>
-              <CardDescription>
-                Flash sale for {product.name} - {quantity} unit(s)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="p-4 bg-gray-50 rounded">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>${(product.price * quantity).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold mt-2 pt-2 border-t">
-                    <span>Total</span>
-                    <span>${(product.price * quantity).toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="text-center py-8">
-                  <p className="mb-4">Your items have been reserved. Please complete payment.</p>
-                  <Button
-                    onClick={() => {
-                      // In a real implementation, this would trigger the Stripe payment flow
-                      // For now, we'll just simulate a successful payment
-                      handleConfirmPayment(`mock_payment_intent_${Date.now()}`);
-                    }}
-                    disabled={confirmPaymentStatus.isPending}
-                  >
-                    {confirmPaymentStatus.isPending ? 'Processing...' : 'Complete Payment'}
-                  </Button>
-                </div>
-
-                <div className="text-center">
-                  <Button variant="outline" onClick={() => setReservationId(null)}>
-                    Cancel Order
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <PaymentForm
+            product={product}
+            quantity={quantity}
+            reservationId={reservationId}
+            sessionId={sessionId}
+            onCancel={() => setReservationId(null)}
+          />
         </div>
       </div>
     );

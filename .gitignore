@@ -20,6 +20,8 @@ yarn.lock
 /playwright/.cache/
 .tanstack
 .env.local
+.kilocode
+.kilo
 
 127.0.0.1-key.pem
 127.0.0.1.pem

@@ -11,7 +11,8 @@ import {
 import { authComponent } from './auth';
 import { AUTUMN_NOT_CONFIGURED_ERROR, autumn, isAutumnConfigured } from './autumn';
 
-const FREE_MESSAGE_LIMIT = 10;
+// Get free message limit from environment variable, default to 10
+const FREE_MESSAGE_LIMIT = Number(process.env.FREE_MESSAGE_LIMIT) || 10;
 const AI_MESSAGE_FEATURE_ID = 'messages';
 
 type ReservationMode = 'free' | 'paid';

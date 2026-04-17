@@ -9,6 +9,19 @@ import appCss from '~/styles/app.css?url';
 const convexPreconnect =
   import.meta.env.VITE_CONVEX_URL || import.meta.env.VITE_CONVEX_SITE_URL || undefined;
 
+// Extract origin from Cloudflare Worker URL for preconnect
+const cloudflareWorkerUrl = import.meta.env.CLOUDFLARE_WORKER_URL;
+const cloudflarePreconnect = cloudflareWorkerUrl
+  ? (() => {
+      try {
+        const url = new URL(cloudflareWorkerUrl);
+        return url.origin;
+      } catch {
+        return null;
+      }
+    })()
+  : null;
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -20,9 +33,9 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       ...seo({
-        title: 'TanStack Start Template',
+        title: 'Firesales - Flash Sale Platform',
         description:
-          'TanStack Start template built with Better Auth, Convex, Tailwind CSS, Shadcn/UI, Resend, and deployed to Netlify',
+          'Firesales is the all-in-one platform for creating, managing, and optimizing flash sales. Scrape product details, set inventory, and launch sales that drive urgency and boost revenue.',
       }),
     ],
     links: [
@@ -48,6 +61,9 @@ export const Route = createRootRoute({
       { rel: 'icon', href: '/favicon.ico' },
       ...(convexPreconnect
         ? [{ rel: 'preconnect', href: convexPreconnect, crossOrigin: 'anonymous' as const }]
+        : []),
+      ...(cloudflarePreconnect
+        ? [{ rel: 'preconnect', href: cloudflarePreconnect, crossOrigin: 'anonymous' as const }]
         : []),
     ],
   }),

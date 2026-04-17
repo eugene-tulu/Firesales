@@ -1,14 +1,13 @@
 import { convexClient } from '@convex-dev/better-auth/client/plugins';
+import { dodopaymentsClient } from '@dodopayments/better-auth';
 import { createAuthClient } from 'better-auth/react';
 
 // Function to get the correct site URL for client-side usage
 function getClientSiteUrl(): string {
-  // If we're in a browser environment, use the current window location
   if (typeof window !== 'undefined') {
     return window.location.origin;
   }
 
-  // Fallback to server-side environment variables for SSR
   const candidates: Array<string | undefined> = [
     process.env.BETTER_AUTH_SITE_URL,
     process.env.BETTER_AUTH_BASE_URL,
@@ -33,12 +32,11 @@ function getClientSiteUrl(): string {
     }
   }
 
-  // Local development fallback
   return 'http://localhost:3000';
 }
 
 export const authClient = createAuthClient({
-  plugins: [convexClient()],
+  plugins: [convexClient(), dodopaymentsClient()],
   baseURL: getClientSiteUrl(),
 });
 

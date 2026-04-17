@@ -1,41 +1,45 @@
-import { createClient, type GenericCtx } from '@convex-dev/better-auth';
+import { createClient } from '@convex-dev/better-auth';
 import { convex } from '@convex-dev/better-auth/plugins';
+import { dodopayments, portal } from '@dodopayments/better-auth';
 import { betterAuth } from 'better-auth';
 import { v } from 'convex/values';
+import { DodoPayments } from 'dodopayments';
 import { getBetterAuthSecret, getSiteUrl } from '../src/lib/server/env.server';
 import { api, components, internal } from './_generated/api';
 import type { DataModel } from './_generated/dataModel';
-import { action, query } from './_generated/server';
+import { action, mutation, query } from './_generated/server';
+import authConfig from './auth.config';
 
 const siteUrl = getSiteUrl();
 const secret = getBetterAuthSecret();
 
-export const authComponent = createClient<DataModel>(components.betterAuth);
+// Initialize Dodo Payments client
+export const dodoPayments = new DodoPayments({
+  bearerToken: process.env.DODO_PAYMENTS_API_KEY,
+  environment: (process.env.DODO_PAYMENTS_ENVIRONMENT as 'test_mode' | 'live_mode') || 'test_mode',
+});
 
-export const createAuth = (
-  ctx: GenericCtx<DataModel>,
-  { optionsOnly } = { optionsOnly: false },
-) => {
+export const authComponent = createClient<DataModel>({
+  adapter: components.betterAuth.adapter,
+});
+
+export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) => {
   return betterAuth({
     logger: {
       disabled: optionsOnly,
     },
     baseURL: siteUrl,
     secret,
-    database: authComponent.adapter(ctx),
-    // Rate limiting at top level - Better Auth only inspects options.rateLimit
     rateLimit: {
-      // Global rate limit - applies to all endpoints
-      window: 60 * 60, // 1 hour in seconds
-      max: 100, // 10 requests per hour per IP
+      window: 60 * 60,
+      max: 100,
     },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
       autoSignIn: true,
       sendResetPassword: async ({ user, url, token }) => {
-        // Apply server-side rate limiting for password reset (defense-in-depth)
-        const ctxWithRunMutation = ctx as GenericCtx<DataModel> & {
+        const ctxWithRunMutation = ctx as any & {
           runMutation?: (
             fn: unknown,
             args: unknown,
@@ -46,15 +50,17 @@ export const createAuth = (
           throw new Error('Rate limiter mutation unavailable in current context');
         }
 
+        // FIXED: Use IP-based rate limiting instead of email-based to prevent DoS
+        const rateLimitKey = `passwordReset:${ctxWithRunMutation.request?.ip || 'unknown'}`;
         const rateLimitResult = await ctxWithRunMutation.runMutation(
           components.rateLimiter.lib.rateLimit,
           {
             name: 'passwordReset',
-            key: `passwordReset:${user.email}`,
+            key: rateLimitKey,
             config: {
               kind: 'token bucket',
-              rate: 3, // 3 requests
-              period: 60 * 60 * 1000, // per hour
+              rate: 3,
+              period: 60 * 60 * 1000,
               capacity: 3,
             },
           },
@@ -68,14 +74,7 @@ export const createAuth = (
           );
         }
 
-        // Call the email action which schedules the mutation using the Resend component
-        // This ensures queueing, batching, durable execution, and rate limiting
-        // We need to call it via the HTTP API since Better Auth callbacks don't have direct access to ctx.runAction
-        // For now, schedule the internal mutation directly if ctx has scheduler
-        // Better Auth callbacks run in Convex context, so ctx should have scheduler
-        // Use type assertion since GenericCtx might not expose scheduler in types
-        // Using unknown instead of any for better type safety
-        const ctxWithScheduler = ctx as GenericCtx<DataModel> & {
+        const ctxWithScheduler = ctx as any & {
           scheduler?: {
             runAfter: (delay: number, fn: unknown, args: unknown) => Promise<void>;
           };
@@ -95,27 +94,31 @@ export const createAuth = (
             },
           );
         } else {
-          // Fallback: if no scheduler, we could call the action via HTTP
-          // But this is an edge case - Better Auth should provide scheduler
           throw new Error('Cannot send email: scheduler not available');
         }
       },
     },
     user: {
       additionalFields: {
-        // Note: role is NOT included here because the Convex adapter validator
-        // doesn't accept additionalFields during user creation. We set role
-        // after user creation via a Convex mutation (see user-management.ts)
         phoneNumber: {
           type: 'string',
           required: false,
         },
       },
     },
-    // No global hooks here; profile creation is handled explicitly by the
-    // registration flow (client calls createProfileAfterSignup) to avoid
-    // timing/race conditions and to keep types simple during development.
-    plugins: [convex()],
+    plugins: [
+      convex({ authConfig }),
+      dodopayments({
+        client: dodoPayments,
+        createCustomerOnSignUp: true,
+        use: [
+          // Checkout plugin disabled - using custom checkout sessions for flash sales
+          // Portal plugin available for customer self-service
+          portal(),
+          // Webhook plugin will be configured separately in Convex HTTP handler
+        ],
+      }),
+    ],
   });
 };
 
@@ -124,7 +127,7 @@ if (!internalRateLimitToken) {
   throw new Error('BETTER_AUTH_SECRET environment variable is required');
 }
 
-// Action wrapper for rate limiting (callable from server functions)
+// Action wrapper for rate limiting
 export const rateLimitAction = action({
   args: {
     token: v.string(),
@@ -152,10 +155,9 @@ export const rateLimitAction = action({
 
     const { token: _token, ...rateLimitArgs } = args;
     try {
-      return await ctx.runMutation(components.rateLimiter.lib.rateLimit, rateLimitArgs);
+      return await ctx.runMutation(components.rateLimiter.lib.rateLimit, rateLimitArgs as any);
     } catch (error) {
       console.error('Rate limit action failed:', error);
-      // Return a safe default in case of rate limiter failure
       return { ok: true, retryAfter: 0 };
     }
   },
@@ -173,11 +175,10 @@ export const getCurrentUser = query({
   },
 });
 
-// Create user profile after signup - called from client after successful signup
+// Create user profile after signup
 export const createProfileAfterSignup = action({
   args: {},
   handler: async (ctx) => {
-    // Try multiple times with small delays to account for session propagation
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         const authUser = await authComponent.getAuthUser(ctx);
@@ -188,17 +189,14 @@ export const createProfileAfterSignup = action({
             throw new Error('User ID not found');
           }
 
-          // Check if profile already exists to avoid duplicates
           const existingProfile = await ctx.runQuery(api.users.getCurrentUserProfile);
           if (existingProfile) {
             return { success: true, message: 'Profile already exists' };
           }
 
-          // Check if this is the first user in the system to assign admin role
           const userCountResult = await ctx.runQuery(api.users.getUserCount, {});
           const isFirstUser = userCountResult.isFirstUser;
 
-          // Create profile via mutation with appropriate role
           await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
             userId,
             role: isFirstUser ? 'admin' : 'user',
@@ -208,11 +206,9 @@ export const createProfileAfterSignup = action({
         }
       } catch (error) {
         if (attempt === 4) {
-          // Last attempt
           console.error('Failed to create profile after multiple attempts:', error);
           throw error;
         }
-        // Wait a bit before retrying - increase delay for better reliability
         await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
       }
     }

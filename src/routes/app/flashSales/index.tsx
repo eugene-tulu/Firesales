@@ -1,14 +1,31 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import { api } from '@convex/_generated/api';
+import { useQuery } from 'convex/react';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { useAuth } from '~/features/auth/hooks/useAuth';
+import { routeAuthGuard } from '~/features/auth/server/route-guards';
 
 export const Route = createFileRoute('/app/flashSales/')({
   component: FlashSalesDashboard,
+  beforeLoad: routeAuthGuard,
+  loader: async ({ context: { convexityClient } }) => {
+    // Server-side check - redirect if not authenticated
+    const session = await convexityClient.query(api.auth.getCurrentUser, {});
+    if (!session) {
+      throw redirect({ to: '/login', search: { redirect: '/app/flashSales' } });
+    }
+
+    // Fetch initial flash sales data for SSR/progressive enhancement
+    const flashSales = await convexityClient.query(api.flashSales.list, {});
+
+    return { flashSales };
+  },
 });
 
 function FlashSalesDashboard() {
   const { user } = useAuth();
+  const { flashSales } = Route.useLoaderData();
 
   return (
     <div className="container mx-auto py-10">
@@ -71,6 +88,10 @@ function FlashSalesDashboard() {
           <p>
             Remember: Flash sales are limited-time events with limited inventory. Our atomic
             inventory system ensures no overselling even during high-traffic periods.
+          </p>
+          <p className="mt-2 text-sm">
+            You have {flashSales?.length || 0} active flash sale
+            {flashSales?.length !== 1 ? 's' : ''}.
           </p>
         </div>
       </div>

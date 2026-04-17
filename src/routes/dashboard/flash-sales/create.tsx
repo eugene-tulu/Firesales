@@ -8,14 +8,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { $scrapeProduct } from '~/lib/scrape-products';
+import { routeAuthGuard } from '~/features/auth/server/route-guards';
 
 export const Route = createFileRoute('/dashboard/flash-sales/create')({
   component: CreateFlashSale,
+  beforeLoad: routeAuthGuard,
 });
 
 function CreateFlashSale() {
   const navigate = useNavigate();
-  const createProduct = useMutation(api.products.createProduct);
+  const createProduct = useMutation(api.products.create);
   const createFlashSale = useMutation(api.flashSales.create);
 
   const [step, setStep] = useState<'url' | 'review' | 'inventory'>('url');
@@ -56,8 +58,7 @@ function CreateFlashSale() {
         price: scrapedData.price * 100, // Convert to cents
         description: scrapedData.description || '',
         imageUrl: scrapedData.imageUrl || '',
-        url: productUrl,
-        totalUnits: parseInt(inventory),
+        sourceUrl: productUrl,
       });
 
       // Create flash sale

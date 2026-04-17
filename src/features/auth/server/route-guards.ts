@@ -5,6 +5,24 @@ import type { RouterAuthContext } from '~/router';
 import type { Capability } from '../../../../convex/authz/policy.map';
 import { Caps } from '../../../../convex/authz/policy.map';
 
+export async function routeAuthGuard({
+  location,
+}: {
+  location: ParsedLocation;
+}): Promise<RouterAuthContext> {
+  try {
+    const { user } = await getCurrentUserServerFn();
+    return { authenticated: true as const, user };
+  } catch (error) {
+    // Re-throw redirects as-is
+    if (error instanceof Response && error.status >= 300 && error.status < 400) {
+      throw error;
+    }
+    // For other errors (including auth failures), redirect to login
+    throw redirect({ to: '/login', search: { redirect: location.href } });
+  }
+}
+
 export async function routeAdminGuard({
   location,
 }: {

@@ -174,6 +174,20 @@ export function AppNavigation() {
                   Dashboard
                 </Link>
                 <Link
+                  to="/app/flashSales"
+                  preload="intent"
+                  className={cn(navigationMenuTriggerStyle(), 'no-underline')}
+                >
+                  Flash Sales
+                </Link>
+                <Link
+                  to="/app/orders"
+                  preload="intent"
+                  className={cn(navigationMenuTriggerStyle(), 'no-underline')}
+                >
+                  Orders
+                </Link>
+                <Link
                   to="/app/ai-playground"
                   preload="intent"
                   className={cn(navigationMenuTriggerStyle(), 'no-underline')}

@@ -1,255 +1,256 @@
+'use node';
+
 import { v } from 'convex/values';
-import { api } from './_generated/api';
+import { api, components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { action, mutation } from './_generated/server';
+import { httpAction, mutation, action } from './_generated/server';
+import { dodoPayments } from './auth';
 
-// Import stripe on the server side
-const stripe =
-  typeof window === 'undefined' ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
-
-interface CreatePaymentIntentParams {
-  productId: Id<'products'>;
-  quantity: number;
-  amount: number; // Total amount in cents
-  currency: string;
-  sessionId: string; // User session ID
-  customerEmail?: string;
+/**
+ * Verify Dodo Payments webhook signature using HMAC-SHA256
+ */
+function verifyDodoWebhookSignature(payload: string, signature: string, secret: string): boolean {
+  const crypto = require('crypto');
+  try {
+    const expected =
+      'sha256=' + crypto.createHmac('sha256', secret).update(payload, 'utf8').digest('hex');
+    const actual = signature.toLowerCase();
+    const expectedLower = expected.toLowerCase();
+    if (actual.length !== expectedLower.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expectedLower));
+  } catch (error) {
+    console.error('Signature verification error:', error);
+    return false;
+  }
 }
 
 /**
- * Server action to create a Stripe payment intent with inventory reservation
- * This ensures that inventory is only reserved when payment intent is created
+ * Creates a Dodo Payments checkout session for a flash sale purchase
  */
-interface CreatePaymentIntentResult {
-  clientSecret?: string;
-  paymentIntentId?: string;
-  reservationId?: string;
-  success: boolean;
-  error?: string;
-}
-
-export const createPaymentIntent = action({
+export const createCheckoutSession = mutation({
   args: {
     productId: v.id('products'),
     quantity: v.number(),
-    amount: v.number(),
-    currency: v.string(),
-    sessionId: v.string(),
-    customerEmail: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<CreatePaymentIntentResult> => {
-    try {
-      // First, try to create a reservation for the inventory
-      // This will use our atomic Cloudflare system to ensure no overselling
-      const reservationResult = await ctx.runMutation(api.inventory.reserve, {
-        productId: args.productId,
-        quantity: args.quantity,
-        sessionId: args.sessionId,
-      });
-
-      if (!reservationResult.reservationId) {
-        throw new Error('Failed to reserve inventory');
-      }
-
-      // Create Stripe payment intent
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: args.amount,
-        currency: args.currency,
-        metadata: {
-          productId: args.productId,
-          quantity: args.quantity.toString(),
-          sessionId: args.sessionId,
-          reservationId: reservationResult.reservationId,
-        },
-        receipt_email: args.customerEmail,
-      });
-
-      // Return the client secret and reservation info
-      return {
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
-        reservationId: reservationResult.reservationId,
-        success: true,
-      };
-    } catch (error) {
-      console.error('Error creating payment intent:', error);
-
-      // If there was an error after reserving inventory, we need to release it
-      // In a real implementation, we'd need to track the reservation ID to release it
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
-  },
-});
-
-interface ConfirmPaymentParams {
-  paymentIntentId: string;
-  reservationId: Id<'reservations'>;
-  sessionId: string;
-}
-
-/**
- * Server action to confirm payment and create order
- * This is called after Stripe payment is confirmed client-side
- */
-interface ConfirmPaymentAndCreateOrderResult {
-  success: boolean;
-  orderId?: string;
-  paymentStatus?: string;
-  error?: string;
-}
-
-export const confirmPaymentAndCreateOrder = action({
-  args: {
-    paymentIntentId: v.string(),
     reservationId: v.id('reservations'),
     sessionId: v.string(),
+    customerEmail: v.optional(v.string()),
+    customerName: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<ConfirmPaymentAndCreateOrderResult> => {
+  handler: async (ctx, args): Promise<{ checkoutUrl: string; cartId: string }> => {
+    // Apply rate limiting based on session ID (prevents spam)
+    const rateLimitKey = `checkout:${args.sessionId}`;
+    const rateLimitResult = await ctx.runMutation(components.rateLimiter.lib.rateLimit, {
+      name: 'createCheckoutSession',
+      key: rateLimitKey,
+      config: {
+        kind: 'token bucket',
+        rate: 10, // 10 attempts
+        period: 60 * 60 * 1000, // per hour
+        capacity: 10,
+      },
+    });
+
+    if (!rateLimitResult.ok) {
+      const retryMinutes = Math.ceil((rateLimitResult.retryAfter ?? 0) / (60 * 1000));
+      throw new Error(
+        `Rate limit exceeded. Too many checkout attempts. Please try again in ${retryMinutes} minutes.`,
+      );
+    }
+
+    const reservation = await ctx.db.get(args.reservationId);
+    if (!reservation || (reservation as any).sessionId !== args.sessionId) {
+      throw new Error('Invalid reservation');
+    }
+    if ((reservation as any).status !== 'reserved') {
+      throw new Error('Reservation is not in reserved state');
+    }
+
+    const product = await ctx.db.get(args.productId);
+    if (!product) {
+      throw new Error('Product not found');
+    }
+
+    const dodoProductId = product._id.toString();
+
+    const checkoutParams: any = {
+      product_cart: [{ product_id: dodoProductId, quantity: args.quantity }],
+      return_url:
+        process.env.DODO_PAYMENTS_RETURN_URL ||
+        `${process.env.BETTER_AUTH_URL || 'http://localhost:3000'}/dashboard/flash-sales`,
+      metadata: {
+        reservationId: args.reservationId,
+        sessionId: args.sessionId,
+        productId: args.productId,
+      },
+    };
+
+    if (args.customerEmail) {
+      checkoutParams.customer = {
+        email: args.customerEmail,
+        ...(args.customerName && { name: args.customerName }),
+      };
+    }
+
     try {
-      // Verify the payment intent status with Stripe
-      const stripePaymentIntent = await stripe.paymentIntents.retrieve(args.paymentIntentId);
-
-      if (stripePaymentIntent.status !== 'succeeded') {
-        // If payment didn't succeed, release the reservation
-        await ctx.runMutation(api.inventory.releaseReservation, {
-          reservationId: args.reservationId,
-          sessionId: args.sessionId,
-        });
-
-        throw new Error(`Payment not successful: ${stripePaymentIntent.status}`);
+      const session = await dodoPayments.checkoutSessions.create(checkoutParams);
+      if (!session?.checkout_url) {
+        throw new Error('Failed to create checkout session');
       }
-
-      // Confirm the reservation atomically (this moves inventory from reserved to sold)
-      await ctx.runMutation(api.inventory.confirmReservation, {
-        reservationId: args.reservationId,
-        sessionId: args.sessionId,
-      });
-
-      // Create the order in our system
-      // We'll need to get the product and quantity info from the reservation or payment intent metadata
-      const reservation = await ctx.runQuery(api.reservations.get, {
-        id: args.reservationId,
-      });
-
-      if (!reservation) {
-        throw new Error('Reservation not found');
-      }
-
-      // Get the product to determine price
-      const product = await ctx.runQuery(api.products.get, {
-        id: reservation.productId,
-      });
-
-      if (!product) {
-        throw new Error('Product not found');
-      }
-
-      // Calculate amount based on product price and quantity
-      const amount = product.price * reservation.quantity;
-
-      const orderResult = await ctx.runMutation(api.orders.create, {
-        productId: reservation.productId,
-        reservationId: args.reservationId,
-        quantity: reservation.quantity,
-        amount,
-        currency: 'usd', // This should come from the payment intent
-        sessionId: args.sessionId,
-        stripeSessionId: args.paymentIntentId,
-      });
 
       return {
-        success: true,
-        orderId: orderResult.orderId,
-        paymentStatus: stripePaymentIntent.status,
+        checkoutUrl: session.checkout_url,
+        cartId: session.session_id || '',
       };
     } catch (error) {
-      console.error('Error confirming payment and creating order:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      console.error('Dodo checkout session creation failed:', error);
+      throw new Error('Payment service unavailable. Please try again later.');
     }
   },
 });
 
 /**
- * Mutation to handle webhook from Stripe for payment confirmation
- * This is an alternative approach to the client-side confirmation
+ * Dodo Payments webhook HTTP endpoint
+ * Receives signed POST requests from Dodo and processes payment events
  */
-export const handleStripeWebhook = mutation({
-  args: {
-    signature: v.string(),
-    payload: v.string(), // Raw payload string
-  },
-  handler: async (ctx, args) => {
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    if (!endpointSecret) {
-      throw new Error('Missing Stripe webhook secret');
-    }
-
-    let event: any;
-
-    // Properly type the Stripe event
-    interface StripeEvent {
-      type: string;
-      data: {
-        object: any;
-      };
+export const handleDodoWebhook = httpAction(
+  async (ctx: any, request: Request): Promise<Response> => {
+    const webhookSecret = process.env.DODO_PAYMENTS_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error('Missing Dodo Payments webhook secret');
+      return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), {
+        status: 500,
+      });
     }
 
     try {
-      // Verify the webhook signature
-      event = stripe.webhooks.constructEvent(args.payload, args.signature, endpointSecret);
-    } catch (err) {
-      console.error(`Webhook signature verification failed: ${(err as Error).message}`);
-      throw new Error(`Webhook signature verification failed: ${(err as Error).message}`);
-    }
+      const payload = await request.text();
+      const signature =
+        request.headers.get('x-dodo-signature') || request.headers.get('X-Dodo-Signature') || '';
 
-    // Handle the event
-    switch (event.type) {
-      case 'payment_intent.succeeded': {
-        const paymentIntent = event.data.object;
-
-        // Extract metadata to find reservation
-        const { reservationId, sessionId } = paymentIntent.metadata || {};
-
-        if (reservationId && sessionId) {
-          // Confirm the reservation and create order
-          await ctx.runMutation(api.inventory.confirmReservation, {
-            reservationId,
-            sessionId,
-          });
-
-          // Create the order
-          // This is simplified - in reality you'd need to get the product and quantity
-          // from the reservation or payment intent metadata
-        }
-        break;
+      if (!signature) {
+        console.error('Missing Dodo webhook signature header');
+        return new Response(JSON.stringify({ error: 'Missing signature' }), { status: 400 });
       }
 
-      case 'payment_intent.payment_failed': {
-        const failedPaymentIntent = event.data.object;
-        const { reservationId: failedReservationId, sessionId: failedSessionId } =
-          failedPaymentIntent.metadata || {};
-
-        if (failedReservationId && failedSessionId) {
-          // Release the reservation since payment failed
-          await ctx.runMutation(api.inventory.releaseReservation, {
-            reservationId: failedReservationId,
-            sessionId: failedSessionId,
-          });
-        }
-        break;
+      const isValid = verifyDodoWebhookSignature(payload, signature, webhookSecret);
+      if (!isValid) {
+        console.error('Invalid Dodo webhook signature');
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401 });
       }
 
-      default:
-        console.log(`Unhandled event type ${event.type}`);
+      let event: any;
+      try {
+        event = JSON.parse(payload);
+      } catch (err) {
+        console.error('Invalid webhook payload JSON:', err);
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+      }
+
+      const metadata = event?.data?.metadata || {};
+      const { reservationId, sessionId, flashSaleId } = metadata;
+
+      console.log(`Received Dodo webhook: ${event.type}`, metadata);
+
+      switch (event.type) {
+        case 'payment.succeeded':
+          console.log(`Payment succeeded for reservation ${reservationId}`);
+          if (reservationId && sessionId) {
+            try {
+              await ctx.runMutation(api.inventory.confirmReservation, { reservationId, sessionId });
+
+              const reservation = await ctx.db.get(reservationId);
+              if (!reservation) {
+                console.error(`Reservation not found: ${reservationId}`);
+                return new Response(JSON.stringify({ error: 'Reservation not found' }), {
+                  status: 404,
+                });
+              }
+
+              const product = await ctx.db.get((reservation as any).productId);
+              if (!product) {
+                console.error(`Product not found: ${(reservation as any).productId}`);
+                return new Response(JSON.stringify({ error: 'Product not found' }), {
+                  status: 404,
+                });
+              }
+
+              const amount = (product as any).price * (reservation as any).quantity;
+
+              const orderResult = await ctx.runMutation(api.orders.create, {
+                productId: (reservation as any).productId,
+                reservationId,
+                quantity: (reservation as any).quantity,
+                amount,
+                currency: 'usd',
+                sessionId,
+                dodoPaymentId: event.data.cart_id || event.data.payment_id || event.id,
+              });
+
+              if (flashSaleId) {
+                await ctx.runMutation(api.flashSales.updateStats, {
+                  flashSaleId,
+                  quantity: (reservation as any).quantity,
+                  amount,
+                });
+              }
+
+              console.log(`Order created successfully: ${orderResult.orderId}`);
+            } catch (error) {
+              console.error('Error processing successful payment:', error);
+              return new Response(JSON.stringify({ error: 'Processing failed' }), { status: 500 });
+            }
+          }
+          break;
+
+        case 'payment.failed':
+        case 'payment.cancelled':
+          console.log(`Payment ${event.type} for reservation ${reservationId}`);
+          if (reservationId && sessionId) {
+            try {
+              await ctx.runMutation(api.inventory.releaseReservation, { reservationId, sessionId });
+              console.log(`Reservation released due to ${event.type}: ${reservationId}`);
+            } catch (error) {
+              console.error(`Error releasing reservation after ${event.type}:`, error);
+            }
+          }
+          break;
+
+        case 'refund.succeeded':
+          console.log(`Refund processed: ${event.id}`);
+          break;
+
+        default:
+          console.log(`Unhandled Dodo webhook event type: ${event.type}`);
+      }
+
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    } catch (error) {
+      console.error('Webhook processing error:', error);
+      return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
+    }
+  },
+);
+
+/**
+ * Audits a payment-related action for security tracking
+ */
+export const auditPaymentAction = mutation({
+  args: {
+    orderId: v.optional(v.id('orders')),
+    action: v.string(),
+    details: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await ctx.auth.getUserIdentity();
+    if (!authUser) {
+      throw new Error('Authentication required');
     }
 
-    return { received: true };
+    // FIXME: Implement proper audit logging table
+    console.log(
+      `AUDIT: User ${authUser.subject} performed ${args.action} on order ${args.orderId}: ${args.details}`,
+    );
+
+    return { success: true };
   },
 });

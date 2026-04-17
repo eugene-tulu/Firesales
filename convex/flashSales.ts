@@ -20,8 +20,11 @@ export const create = mutation({
       throw new Error('Product not found or unauthorized');
     }
 
-    // Generate a unique sale URL
-    const saleUrl = Math.random().toString(36).substring(2, 10); // Random 8-character string
+    // Generate a unique sale URL using cryptographically secure random
+    // Using 8 random bytes encoded in base36 gives ~12 chars of randomness
+    const randomBytes = new Uint8Array(6);
+    crypto.getRandomValues(randomBytes);
+    const saleUrl = Buffer.from(randomBytes).toString('base64url').substring(0, 8);
 
     // Create the flash sale
     const flashSaleId = await ctx.db.insert('flashSales', {
@@ -42,6 +45,33 @@ export const create = mutation({
       await ctx.db.patch(args.productId, {
         status: 'active',
         publishedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+
+    // Initialize inventory for the product with the allocated amount (if not exists)
+    const existingInventory = await ctx.db
+      .query('inventory')
+      .withIndex('by_productId', (q) => q.eq('productId', args.productId))
+      .first();
+
+    if (!existingInventory) {
+      await ctx.db.insert('inventory', {
+        productId: args.productId,
+        totalUnits: args.allocatedInventory,
+        availableUnits: args.allocatedInventory,
+        reservedUnits: 0,
+        soldUnits: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    } else {
+      // Optionally update total units if increased (ensure availableUnits stays consistent)
+      const newTotal = Math.max(existingInventory.totalUnits, args.allocatedInventory);
+      const delta = newTotal - existingInventory.totalUnits;
+      await ctx.db.patch(existingInventory._id, {
+        totalUnits: newTotal,
+        availableUnits: existingInventory.availableUnits + delta,
         updatedAt: Date.now(),
       });
     }

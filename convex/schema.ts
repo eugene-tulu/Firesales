@@ -172,7 +172,7 @@ export default defineSchema({
     productId: v.id('products'),
     userId: v.optional(v.string()), // Buyer ID (optional for anonymous purchases)
     sessionId: v.string(), // Session identifier for anonymous users
-    stripeSessionId: v.optional(v.string()),
+    dodoPaymentId: v.optional(v.string()), // Dodo Payments cart/checkout ID
     status: v.union(
       v.literal('pending'),
       v.literal('paid'),
@@ -187,7 +187,7 @@ export default defineSchema({
   })
     .index('by_productId', ['productId'])
     .index('by_sessionId', ['sessionId'])
-    .index('by_stripeSessionId', ['stripeSessionId'])
+    .index('by_dodoPaymentId', ['dodoPaymentId'])
     .index('by_status', ['status'])
     .index('by_createdAt', ['createdAt']),
 });

@@ -4,6 +4,7 @@ import { NotFound } from '~/components/NotFound';
 import { DashboardErrorBoundary } from '~/components/RouteErrorBoundaries';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuth } from '~/features/auth/hooks/useAuth';
+import { routeAuthGuard } from '~/features/auth/server/route-guards';
 
 export const Route = createFileRoute('/app')({
   pendingMs: 150,
@@ -12,6 +13,7 @@ export const Route = createFileRoute('/app')({
   component: AppLayout,
   errorComponent: DashboardErrorBoundary,
   notFoundComponent: () => <NotFound />,
+  beforeLoad: routeAuthGuard,
 });
 
 function AppLayout() {

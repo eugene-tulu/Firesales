@@ -15,7 +15,7 @@ export const create = mutation({
     amount: v.number(),
     currency: v.string(),
     sessionId: v.string(), // Session ID for anonymous users, or user ID for authenticated users
-    stripeSessionId: v.optional(v.string()),
+    dodoPaymentId: v.optional(v.string()), // Dodo Payments checkout/cart ID
   },
   handler: async (ctx, args) => {
     // Verify the product exists
@@ -48,7 +48,7 @@ export const create = mutation({
       productId: args.productId,
       userId: args.reservationId ? undefined : args.sessionId, // Store session ID if no reservation
       sessionId: args.sessionId,
-      stripeSessionId: args.stripeSessionId,
+      dodoPaymentId: args.dodoPaymentId,
       status: 'pending',
       amount: args.amount,
       currency: args.currency,

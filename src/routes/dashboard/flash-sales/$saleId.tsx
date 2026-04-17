@@ -14,11 +14,13 @@ export const Route = createFileRoute('/dashboard/flash-sales/$saleId')({
 
 function FlashSaleDetail() {
   const { saleId } = Route.useParams();
-  const flashSales = useQuery(api.flashSales.list);
+  const sale = useQuery(api.flashSales.get, { flashSaleId: saleId });
   const goLive = useMutation(api.flashSales.goLive);
   const [copied, setCopied] = useState(false);
 
-  const sale = flashSales?.find((s: any) => s._id === saleId);
+  if (!sale) {
+    return <div className="p-8">Loading...</div>;
+  }
 
   if (!sale) {
     return <div className="p-8">Loading...</div>;
@@ -136,15 +138,21 @@ function FlashSaleDetail() {
               className="w-full h-64 object-cover rounded"
             />
           )}
-          <div>
-            <div className="text-sm text-muted-foreground">Price</div>
-            <div className="text-2xl font-bold">${(sale.product?.price / 100).toFixed(2)}</div>
-          </div>
-          {sale.product?.description && (
-            <div>
-              <div className="text-sm text-muted-foreground mb-1">Description</div>
-              <p className="text-sm">{sale.product.description}</p>
-            </div>
+          {sale.product ? (
+            <>
+              <div>
+                <div className="text-sm text-muted-foreground">Price</div>
+                <div className="text-2xl font-bold">${(sale.product.price / 100).toFixed(2)}</div>
+              </div>
+              {sale.product.description && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-1">Description</div>
+                  <p className="text-sm">{sale.product.description}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-destructive">Product data unavailable</div>
           )}
         </CardContent>
       </Card>
