@@ -205,7 +205,14 @@ function LoginPage() {
             Sign in to your account
           </h2>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={form.handleSubmit}>
+        <form
+          className="mt-8 space-y-6"
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+        >
           {successMessage && (
             <div className="bg-primary/10 border border-primary/20 text-primary px-4 py-3 rounded">
               {successMessage}
