@@ -1,5 +1,4 @@
-'use node';
-
+import { sha256 } from 'js-sha256';
 import { v } from 'convex/values';
 import { api, components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
@@ -10,14 +9,19 @@ import { dodoPayments } from './auth';
  * Verify Dodo Payments webhook signature using HMAC-SHA256
  */
 function verifyDodoWebhookSignature(payload: string, signature: string, secret: string): boolean {
-  const crypto = require('crypto');
   try {
-    const expected =
-      'sha256=' + crypto.createHmac('sha256', secret).update(payload, 'utf8').digest('hex');
+    const h = sha256.hmac.create(secret);
+    h.update(payload);
+    const expected = 'sha256=' + h.digest();
     const actual = signature.toLowerCase();
     const expectedLower = expected.toLowerCase();
     if (actual.length !== expectedLower.length) return false;
-    return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expectedLower));
+    // Constant-time comparison
+    let result = 0;
+    for (let i = 0; i < actual.length; i++) {
+      result |= actual.charCodeAt(i) ^ expectedLower.charCodeAt(i);
+    }
+    return result === 0;
   } catch (error) {
     console.error('Signature verification error:', error);
     return false;

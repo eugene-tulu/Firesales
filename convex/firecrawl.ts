@@ -1,5 +1,4 @@
-'use node';
-
+// Use node
 import Firecrawl from '@mendable/firecrawl-js';
 import { v } from 'convex/values';
 import type { ActionCtx } from './_generated/server';

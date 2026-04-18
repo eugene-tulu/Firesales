@@ -13,17 +13,53 @@ import authConfig from './auth.config';
 const siteUrl = getSiteUrl();
 const secret = getBetterAuthSecret();
 
-// Initialize Dodo Payments client
-export const dodoPayments = new DodoPayments({
-  bearerToken: process.env.DODO_PAYMENTS_API_KEY,
-  environment: (process.env.DODO_PAYMENTS_ENVIRONMENT as 'test_mode' | 'live_mode') || 'test_mode',
-});
+// Initialize Dodo Payments client (optional for development)
+const dodoApiKey = process.env.DODO_PAYMENTS_API_KEY;
+const dodoEnvironment =
+  (process.env.DODO_PAYMENTS_ENVIRONMENT as 'test_mode' | 'live_mode') || 'test_mode';
+
+// Create a Dodo Payments client (real or mock)
+export const dodoPayments: any = dodoApiKey
+  ? new DodoPayments({
+      bearerToken: dodoApiKey,
+      environment: dodoEnvironment,
+    })
+  : {
+      checkoutSessions: {
+        create: async (params: any) => {
+          console.warn('Mock Dodo: checkoutSessions.create called with', params);
+          return {
+            checkout_url: 'https://example.com/checkout/mock',
+            session_id: 'mock-session-id',
+          };
+        },
+      },
+      portal: () => ({}),
+    };
 
 export const authComponent = createClient<DataModel>({
   adapter: components.betterAuth.adapter,
 });
 
 export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) => {
+  const plugins = [
+    convex({ authConfig }),
+    ...(dodoApiKey
+      ? [
+          dodopayments({
+            client: dodoPayments,
+            createCustomerOnSignUp: true,
+            use: [
+              // Checkout plugin disabled - using custom checkout sessions for flash sales
+              // Portal plugin available for customer self-service
+              portal(),
+              // Webhook plugin will be configured separately in Convex HTTP handler
+            ],
+          }),
+        ]
+      : []),
+  ];
+
   return betterAuth({
     logger: {
       disabled: optionsOnly,
@@ -106,19 +142,7 @@ export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) =
         },
       },
     },
-    plugins: [
-      convex({ authConfig }),
-      dodopayments({
-        client: dodoPayments,
-        createCustomerOnSignUp: true,
-        use: [
-          // Checkout plugin disabled - using custom checkout sessions for flash sales
-          // Portal plugin available for customer self-service
-          portal(),
-          // Webhook plugin will be configured separately in Convex HTTP handler
-        ],
-      }),
-    ],
+    plugins,
   });
 };
 

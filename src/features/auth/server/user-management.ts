@@ -1,6 +1,5 @@
 import { api } from '@convex/_generated/api';
-import { createAuth } from '@convex/auth';
-import { setupFetchClient } from '@convex-dev/better-auth/react-start';
+import { convexBetterAuthReactStart } from '@convex-dev/better-auth/react-start';
 import { createServerFn } from '@tanstack/react-start';
 import { getCookie, getRequest } from '@tanstack/react-start/server';
 import { z } from 'zod';
@@ -35,15 +34,21 @@ export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
         'unknown';
 
       // Initialize Convex fetch client for server-side calls
-      const { fetchQuery, fetchMutation, fetchAction } = await setupFetchClient(
-        createAuth,
-        getCookie,
-      );
+      const convexUrl = import.meta.env.VITE_CONVEX_URL;
+      const convexSiteUrl = import.meta.env.VITE_CONVEX_SITE_URL;
+      if (!convexUrl || !convexSiteUrl) {
+        throw new Error('VITE_CONVEX_URL and VITE_CONVEX_SITE_URL must be set');
+      }
+
+      const { fetchAuthQuery, fetchAuthMutation, fetchAuthAction } = convexBetterAuthReactStart({
+        convexUrl,
+        convexSiteUrl,
+      });
 
       // Apply server-side rate limiting (defense-in-depth)
       // Skip rate limiting in development mode
       if (!import.meta.env.DEV) {
-        const rateLimitResult = await fetchAction(api.auth.rateLimitAction, {
+        const rateLimitResult = await fetchAuthAction(api.auth.rateLimitAction, {
           token: rateLimitToken,
           name: 'signup',
           key: `signup:${clientIP}`,
@@ -64,14 +69,10 @@ export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
       }
 
       // Check if this would be the first user (using Convex)
-      const userCountResult = await fetchQuery(api.users.getUserCount, {});
+      const userCountResult = await fetchAuthQuery(api.users.getUserCount, {});
       const isFirstUser = userCountResult.isFirstUser;
 
-      // Get Convex site URL for Better Auth HTTP calls
-      const convexSiteUrl = import.meta.env.VITE_CONVEX_SITE_URL;
-      if (!convexSiteUrl) {
-        throw new Error('VITE_CONVEX_SITE_URL environment variable is required');
-      }
+      // We already have convexSiteUrl from above (line 38)
 
       // Create user via Convex Better Auth HTTP handler
       const signUpResponse = await fetch(`${convexSiteUrl}/api/auth/sign-up/email`, {

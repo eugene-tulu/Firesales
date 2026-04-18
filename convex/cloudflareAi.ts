@@ -1,5 +1,4 @@
-'use node';
-
+// Use node
 import { generateText, streamText } from 'ai';
 import { v } from 'convex/values';
 import { createWorkersAI } from 'workers-ai-provider';

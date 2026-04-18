@@ -1,6 +1,6 @@
 import { api } from '@convex/_generated/api';
 import { createAuth } from '@convex/auth';
-import { setupFetchClient } from '@convex-dev/better-auth/react-start';
+import { convexBetterAuthReactStart } from '@convex-dev/better-auth/react-start';
 import { redirect } from '@tanstack/react-router';
 import { getCookie, getRequest } from '@tanstack/react-start/server';
 import type { UserId } from '~/lib/shared/user-id';
@@ -40,8 +40,17 @@ async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       return null;
     }
 
-    const { fetchQuery } = await setupFetchClient(createAuth, getCookie);
-    const profile = await fetchQuery(api.users.getCurrentUserProfile, {});
+    const convexUrl = import.meta.env.VITE_CONVEX_URL;
+    const convexSiteUrl = import.meta.env.VITE_CONVEX_SITE_URL;
+    if (!convexUrl || !convexSiteUrl) {
+      throw new Error('VITE_CONVEX_URL and VITE_CONVEX_SITE_URL must be set');
+    }
+
+    const { fetchAuthQuery } = convexBetterAuthReactStart({
+      convexUrl,
+      convexSiteUrl,
+    });
+    const profile = await fetchAuthQuery(api.users.getCurrentUserProfile, {});
 
     if (!profile) {
       return null;
