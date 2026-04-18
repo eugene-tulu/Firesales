@@ -1,5 +1,5 @@
 import { createStartHandler, defaultRenderHandler } from '@tanstack/react-start/server';
-import { requireAuth } from '~/features/auth/server/auth-guards';
+import { getCurrentUser } from '~/features/auth/server/auth-guards';
 import { setSentryServerUser } from '~/lib/sentry';
 
 // Database connection is now handled with lazy initialization via db proxy
@@ -8,10 +8,14 @@ import { setSentryServerUser } from '~/lib/sentry';
 const handler = createStartHandler(async ({ request, router, responseHeaders }) => {
   // Set Sentry user context for server-side events
   try {
-    const authResult = await requireAuth();
-    setSentryServerUser(authResult.user);
+    const user = await getCurrentUser();
+    if (user) {
+      setSentryServerUser(user);
+    } else {
+      setSentryServerUser(null);
+    }
   } catch {
-    // If user is not authenticated, clear the context
+    // If user is not authenticated or error occurred, clear the context
     setSentryServerUser(null);
   }
 

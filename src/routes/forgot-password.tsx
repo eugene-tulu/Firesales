@@ -55,7 +55,7 @@ function ForgotPasswordPage() {
       }
 
       try {
-        await authClient.forgetPassword({
+        await authClient.forgotPassword({
           email: value.email,
           redirectTo: `${window.location.origin}/reset-password`,
         });

@@ -34,7 +34,7 @@ function getCurrentRequest(): Request | undefined {
  * Note: This calls the Convex Better Auth HTTP handler to get the session,
  * then fetches the role from the userProfiles table via Convex.
  */
-async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   try {
     if (!getCurrentRequest()) {
       return null;

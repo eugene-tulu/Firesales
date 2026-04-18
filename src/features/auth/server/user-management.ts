@@ -1,10 +1,9 @@
 import { api } from '@convex/_generated/api';
 import { convexBetterAuthReactStart } from '@convex-dev/better-auth/react-start';
 import { createServerFn } from '@tanstack/react-start';
-import { getCookie, getRequest } from '@tanstack/react-start/server';
+import { getRequest } from '@tanstack/react-start/server';
 import { z } from 'zod';
 import { handleServerError } from '~/lib/server/error-utils.server';
-import { USER_ROLES } from '../types';
 
 // Zod schemas for user management
 const signUpWithFirstAdminSchema = z.object({
@@ -26,28 +25,32 @@ export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
     }
 
     try {
-      // Get client IP for rate limiting (defense-in-depth)
+      // Get client IP and origin for rate limiting and headers
       const request = getRequest();
       const clientIP =
         request?.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
         request?.headers.get('x-real-ip') ||
         'unknown';
+      // Use incoming Origin header if present, otherwise fall back to BETTER_AUTH_URL
+      const originFromRequest = request?.headers.get('origin');
+      const fallbackOrigin = process.env.BETTER_AUTH_URL || '';
+      const origin = originFromRequest || fallbackOrigin;
 
-      // Initialize Convex fetch client for server-side calls
+      // Get Convex URLs for direct API calls (not for auth queries)
       const convexUrl = import.meta.env.VITE_CONVEX_URL;
       const convexSiteUrl = import.meta.env.VITE_CONVEX_SITE_URL;
       if (!convexUrl || !convexSiteUrl) {
         throw new Error('VITE_CONVEX_URL and VITE_CONVEX_SITE_URL must be set');
       }
 
-      const { fetchAuthQuery, fetchAuthMutation, fetchAuthAction } = convexBetterAuthReactStart({
-        convexUrl,
-        convexSiteUrl,
-      });
-
       // Apply server-side rate limiting (defense-in-depth)
       // Skip rate limiting in development mode
       if (!import.meta.env.DEV) {
+        const { fetchAuthAction } = convexBetterAuthReactStart({
+          convexUrl,
+          convexSiteUrl,
+        });
+
         const rateLimitResult = await fetchAuthAction(api.auth.rateLimitAction, {
           token: rateLimitToken,
           name: 'signup',
@@ -68,17 +71,12 @@ export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
         }
       }
 
-      // Check if this would be the first user (using Convex)
-      const userCountResult = await fetchAuthQuery(api.users.getUserCount, {});
-      const isFirstUser = userCountResult.isFirstUser;
-
-      // We already have convexSiteUrl from above (line 38)
-
       // Create user via Convex Better Auth HTTP handler
       const signUpResponse = await fetch(`${convexSiteUrl}/api/auth/sign-up/email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(origin && { Origin: origin }), // Forward origin for CSRF protection
         },
         body: JSON.stringify({
           email,
@@ -137,8 +135,6 @@ export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
       // Better Auth manages user auth data in betterAuth.user table
       // We store app-specific data (like role) in app.userProfiles table
       if (signUpResult?.user?.id) {
-        const roleToSet = isFirstUser ? USER_ROLES.ADMIN : USER_ROLES.USER;
-
         // Delay to ensure Better Auth user is committed to Convex database
         await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -148,10 +144,7 @@ export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
 
       return {
         success: true,
-        isFirstUser,
-        message: isFirstUser
-          ? 'Admin account created successfully!'
-          : 'Account created successfully!',
+        message: 'Account created successfully!',
         userCredentials: {
           email,
         },

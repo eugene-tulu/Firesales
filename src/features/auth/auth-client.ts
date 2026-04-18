@@ -35,9 +35,19 @@ function getClientSiteUrl(): string {
   return 'http://localhost:3000';
 }
 
+// Extend the auth client with forgotPassword and resetPassword methods
 export const authClient = createAuthClient({
   plugins: [convexClient(), dodopaymentsClient()],
   baseURL: getClientSiteUrl(),
-});
+}) as ReturnType<typeof createAuthClient> & {
+  forgotPassword: (params: {
+    email: string;
+    redirectTo: string;
+  }) => Promise<{ data?: unknown; error?: { message: string } }>;
+  resetPassword: (params: {
+    token: string;
+    newPassword: string;
+  }) => Promise<{ data?: unknown; error?: { message: string } }>;
+};
 
 export const { signIn, signOut, useSession } = authClient;

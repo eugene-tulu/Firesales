@@ -81,7 +81,7 @@ The password reset emails use professional HTML templates with:
 ### Better Auth Integration
 
 - **Custom `sendResetPassword`**: Better Auth configuration sends emails via Convex Resend component
-- **Client Methods**: `authClient.forgetPassword()` and `authClient.resetPassword()`
+- **Client Methods**: `authClient.forgotPassword()` and `authClient.resetPassword()
 - `testEmailServerFn`: Tests email configuration (admin only)
 
 ### Key Features
@@ -95,7 +95,7 @@ The password reset emails use professional HTML templates with:
 
 ### Email Flow
 
-1. User requests password reset via `authClient.forgetPassword()`
+1. User requests password reset via `authClient.forgotPassword()`
 2. Better Auth generates secure token and calls our custom `sendResetPassword` function
 3. Email sent via Convex Resend component with reset link using our custom template
 4. User clicks link and resets password via `authClient.resetPassword()`
