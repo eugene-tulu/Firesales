@@ -1,92 +1,101 @@
-import { createRootRoute, HeadContent, Scripts } from '@tanstack/react-router';
-import { AppShell } from '~/components/AppShell';
-import { DefaultCatchBoundary } from '~/components/DefaultCatchBoundary';
-import { NotFound } from '~/components/NotFound';
-import { Providers } from '~/components/Providers';
-import { seo } from '~/lib/seo';
+import { HeadContent, Scripts, createRootRouteWithContext } from '@tanstack/react-router';
+import * as React from 'react';
+import { createServerFn } from '@tanstack/react-start';
+import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react';
+import type { ConvexQueryClient } from '@convex-dev/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import appCss from '~/styles/app.css?url';
+import { authClient } from '~/features/auth/auth-client';
+import { getToken } from '~/lib/auth-server';
+import { setupClaimRefresh } from '~/lib/roleRefresh';
+import { AppShell } from '~/components/AppShell';
+import { Providers } from '~/components/Providers';
+import { ErrorBoundaryWrapper } from '~/components/ErrorBoundary';
 
-const convexPreconnect =
-  import.meta.env.VITE_CONVEX_URL || import.meta.env.VITE_CONVEX_SITE_URL || undefined;
+// Server function to fetch auth token for SSR hydration
+const fetchAuthToken = createServerFn({ method: 'GET' }).handler(async () => {
+  return await getToken();
+});
 
-// Extract origin from Cloudflare Worker URL for preconnect
-const cloudflareWorkerUrl = import.meta.env.CLOUDFLARE_WORKER_URL;
-const cloudflarePreconnect = cloudflareWorkerUrl
-  ? (() => {
-      try {
-        const url = new URL(cloudflareWorkerUrl);
-        return url.origin;
-      } catch {
-        return null;
-      }
-    })()
-  : null;
-
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+  convexQueryClient: ConvexQueryClient;
+}>()({
   head: () => ({
     meta: [
-      {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      ...seo({
-        title: 'Firesales - Flash Sale Platform',
-        description:
-          'Firesales is the all-in-one platform for creating, managing, and optimizing flash sales. Scrape product details, set inventory, and launch sales that drive urgency and boost revenue.',
-      }),
+      { charSet: 'utf-8' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
-      {
-        rel: 'apple-touch-icon',
-        sizes: '180x180',
-        href: '/apple-touch-icon.png',
-      },
-      {
-        rel: 'icon',
-        type: 'image/png',
-        sizes: '32x32',
-        href: '/favicon-32x32.png',
-      },
-      {
-        rel: 'icon',
-        type: 'image/png',
-        sizes: '16x16',
-        href: '/favicon-16x16.png',
-      },
-      { rel: 'manifest', href: '/site.webmanifest', color: '#fffff' },
       { rel: 'icon', href: '/favicon.ico' },
-      ...(convexPreconnect
-        ? [{ rel: 'preconnect', href: convexPreconnect, crossOrigin: 'anonymous' as const }]
-        : []),
-      ...(cloudflarePreconnect
-        ? [{ rel: 'preconnect', href: cloudflarePreconnect, crossOrigin: 'anonymous' as const }]
-        : []),
     ],
   }),
-  errorComponent: DefaultCatchBoundary,
-  notFoundComponent: () => <NotFound />,
-  component: RootDocument,
+  beforeLoad: async (ctx) => {
+    const token = await fetchAuthToken();
+    if (token && ctx.context.convexQueryClient?.serverHttpClient) {
+      ctx.context.convexQueryClient.serverHttpClient.setAuth(token);
+    }
+    // Return only serializable data for route context
+    return { token, isAuthenticated: !!token };
+  },
+  component: RootComponent,
 });
 
-// Root document component that renders the full HTML structure
-function RootDocument() {
+function RootComponent() {
+  const { token, convexQueryClient } = Route.useRouteContext();
+
+  React.useEffect(() => {
+    return setupClaimRefresh();
+  }, []);
+
   return (
-    <html
-      lang="en"
-      // Suppress hydration warnings for theme-related attributes
-      suppressHydrationWarning
+    <ErrorBoundaryWrapper
+      title="Authentication Error"
+      description="Failed to initialize authentication. Please refresh the page."
+      showDetails={false}
     >
+      <RootDocument>
+        <ConvexBetterAuthProvider
+          client={convexQueryClient.convexClient}
+          authClient={authClient as any}
+          initialToken={token}
+        >
+          <Providers>
+            <AppShell />
+          </Providers>
+        </ConvexBetterAuthProvider>
+      </RootDocument>
+    </ErrorBoundaryWrapper>
+  );
+}
+
+function RootDocument({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var saved = localStorage.getItem('theme');
+                  var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  var theme = saved || (systemDark ? 'dark' : 'light');
+                  if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
         <HeadContent />
       </head>
-      <body>
-        <Providers>
-          <AppShell />
-        </Providers>
+      <body className="bg-background text-foreground">
+        {children}
         <Scripts />
       </body>
     </html>

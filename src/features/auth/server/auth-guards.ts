@@ -1,8 +1,7 @@
 import { api } from '@convex/_generated/api';
-import { createAuth } from '@convex/auth';
-import { convexBetterAuthReactStart } from '@convex-dev/better-auth/react-start';
 import { redirect } from '@tanstack/react-router';
-import { getCookie, getRequest } from '@tanstack/react-start/server';
+import { getRequest } from '@tanstack/react-start/server';
+import { ConvexHttpClient } from 'convex/browser';
 import type { UserId } from '~/lib/shared/user-id';
 import { normalizeUserId } from '~/lib/shared/user-id';
 import type { UserRole } from '../types';
@@ -19,68 +18,105 @@ export interface AuthResult {
   user: AuthenticatedUser;
 }
 
-function getCurrentRequest(): Request | undefined {
+/**
+ * Get the current user on the server by using the Convex JWT token from cookies.
+ * This avoids HTTP calls and stream conflicts.
+ */
+async function getCurrentUserServer(): Promise<AuthenticatedUser | null> {
   if (!import.meta.env.SSR) {
-    throw new Error('Authentication utilities must run on the server');
+    throw new Error('getCurrentUserServer must be called on the server');
   }
 
-  return getRequest();
-}
+  const request = getRequest();
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) {
+    return null;
+  }
 
-/**
- * Get the current session and user information from Convex Better Auth
- * Returns null if not authenticated
- *
- * Note: This calls the Convex Better Auth HTTP handler to get the session,
- * then fetches the role from the userProfiles table via Convex.
- */
-export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+  // Parse cookies
+  const cookies = Object.fromEntries(
+    cookieHeader.split(';').map((c) => {
+      const [key, value] = c.trim().split('=');
+      return [key, decodeURIComponent(value || '')];
+    }),
+  );
+
+  // Better Auth Convex integration stores the Convex JWT in this cookie
+  const convexJwt = cookies['convex_jwt'];
+  if (!convexJwt) {
+    return null;
+  }
+
+  const convexUrl = import.meta.env.VITE_CONVEX_URL;
+  if (!convexUrl) {
+    throw new Error('VITE_CONVEX_URL is not set');
+  }
+
+  const convex = new ConvexHttpClient(convexUrl);
+  convex.setAuth(convexJwt);
+
   try {
-    if (!getCurrentRequest()) {
-      return null;
-    }
+    const profile = await convex.query(api.users.getCurrentUserProfile, {});
+    if (!profile) return null;
 
-    const convexUrl = import.meta.env.VITE_CONVEX_URL;
-    const convexSiteUrl = import.meta.env.VITE_CONVEX_SITE_URL;
-    if (!convexUrl || !convexSiteUrl) {
-      throw new Error('VITE_CONVEX_URL and VITE_CONVEX_SITE_URL must be set');
-    }
+    const userId = normalizeUserId(profile);
+    if (!userId) return null;
 
-    const { fetchAuthQuery } = convexBetterAuthReactStart({
-      convexUrl,
-      convexSiteUrl,
-    });
-    const profile = await fetchAuthQuery(api.users.getCurrentUserProfile, {});
-
-    if (!profile) {
-      return null;
-    }
-
-    const sessionUserId = normalizeUserId(profile);
-    if (!sessionUserId) {
-      return null;
-    }
-
-    const sessionUserEmail =
-      typeof profile?.email === 'string' && profile.email.length > 0 ? profile.email : null;
-    if (!sessionUserEmail) {
-      return null;
-    }
+    const userEmail =
+      typeof profile.email === 'string' && profile.email.length > 0 ? profile.email : null;
+    if (!userEmail) return null;
 
     return {
-      id: sessionUserId,
-      email: sessionUserEmail,
-      role: profile?.role === USER_ROLES.ADMIN ? USER_ROLES.ADMIN : USER_ROLES.USER,
-      name: typeof profile?.name === 'string' ? profile.name : undefined,
+      id: userId,
+      email: userEmail,
+      role: profile.role === USER_ROLES.ADMIN ? USER_ROLES.ADMIN : USER_ROLES.USER,
+      name: typeof profile.name === 'string' ? profile.name : undefined,
     };
-  } catch (error) {
-    console.error('Error in getCurrentUser:', error);
+  } catch {
     return null;
   }
 }
 
 /**
- * Require authentication
+ * Get the current user on the client using Better Auth client.
+ */
+async function getCurrentUserClient(): Promise<AuthenticatedUser | null> {
+  try {
+    const { authClient } = await import('~/features/auth/auth-client');
+    const session: any = await authClient.getSession();
+    if (!session?.user) return null;
+
+    const user = session.user;
+    const userId = normalizeUserId(user);
+    if (!userId) return null;
+
+    const userEmail = typeof user.email === 'string' && user.email.length > 0 ? user.email : null;
+    if (!userEmail) return null;
+
+    return {
+      id: userId,
+      email: userEmail,
+      role: user.role === USER_ROLES.ADMIN ? USER_ROLES.ADMIN : USER_ROLES.USER,
+      name: typeof user.name === 'string' ? user.name : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the current session and user information.
+ * Returns null if not authenticated.
+ */
+export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+  if (import.meta.env.SSR) {
+    return getCurrentUserServer();
+  }
+  return getCurrentUserClient();
+}
+
+/**
+ * Require authentication - throws redirect if not authenticated
  */
 export async function requireAuth(): Promise<AuthResult> {
   const user = await getCurrentUser();

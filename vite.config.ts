@@ -19,6 +19,9 @@ export default defineConfig((env) => {
         ignored: ['**/routeTree.gen.ts'],
       },
     },
+    ssr: {
+      noExternal: ['@convex-dev/better-auth'],
+    },
     define: {
       global: 'globalThis',
     },

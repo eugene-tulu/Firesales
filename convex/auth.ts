@@ -11,7 +11,7 @@ import { action, mutation, query } from './_generated/server';
 import authConfig from './auth.config';
 
 const siteUrl = getSiteUrl();
-const secret = getBetterAuthSecret();
+const secret = getBetterAuthSecret(); // Required — throws if not set
 
 // Initialize Dodo Payments client (optional for development)
 const dodoApiKey = process.env.DODO_PAYMENTS_API_KEY;
@@ -37,9 +37,7 @@ export const dodoPayments: any = dodoApiKey
       portal: () => ({}),
     };
 
-export const authComponent = createClient<DataModel>({
-  adapter: components.betterAuth.adapter,
-});
+export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) => {
   const plugins = [
@@ -143,6 +141,7 @@ export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) =
       },
     },
     plugins,
+    database: authComponent.adapter(ctx),
   });
 };
 

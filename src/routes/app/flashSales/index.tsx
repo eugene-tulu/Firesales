@@ -9,15 +9,16 @@ import { routeAuthGuard } from '~/features/auth/server/route-guards';
 export const Route = createFileRoute('/app/flashSales/')({
   component: FlashSalesDashboard,
   beforeLoad: routeAuthGuard,
-  loader: async ({ context: { convexityClient } }) => {
+  loader: async ({ context: { convexQueryClient } }) => {
+    const convexClient = convexQueryClient.convexClient;
     // Server-side check - redirect if not authenticated
-    const session = await convexityClient.query(api.auth.getCurrentUser, {});
+    const session = await convexClient.query(api.auth.getCurrentUser, {});
     if (!session) {
       throw redirect({ to: '/login', search: { redirect: '/app/flashSales' } });
     }
 
     // Fetch initial flash sales data for SSR/progressive enhancement
-    const flashSales = await convexityClient.query(api.flashSales.list, {});
+    const flashSales = await convexClient.query(api.flashSales.list, {});
 
     return { flashSales };
   },

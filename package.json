@@ -28,7 +28,7 @@
     "netlify"
   ],
   "scripts": {
-    "dev": "concurrently -n vite,convex -c blue,green \"NODE_OPTIONS='--import ./instrument.server.mjs' vite dev\" \"npx convex dev\"",
+    "dev": "concurrently -n vite,convex -c blue,green \"NODE_OPTIONS='--import ./instrument.server.mjs --max-old-space-size=4096' vite dev\" \"npx convex dev\"",
     "dev:full": "tsx scripts/dev-full.ts",
     "build": "vite build && mkdir -p .output/server && cp instrument.server.mjs .output/server",
     "start": "node --import ./.output/server/instrument.server.mjs ./.output/server/index.mjs",
@@ -52,8 +52,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",
-    "@convex-dev/better-auth": "^0.12.0",
+    "@convex-dev/better-auth": "^0.11.4",
     "@convex-dev/rate-limiter": "^0.2.14",
+    "@convex-dev/react-query": "^0.1.0",
     "@convex-dev/resend": "^0.1.13",
     "@dodopayments/better-auth": "^1.5.0",
     "@mendable/firecrawl-js": "^4.5.0",
@@ -69,9 +70,11 @@
     "@sentry/profiling-node": "^10.23.0",
     "@sentry/tanstackstart-react": "^10.23.0",
     "@tanstack/react-form": "^1.23.8",
-    "@tanstack/react-router": "^1.139.2",
+    "@tanstack/react-router": "^1.167.0",
     "@tanstack/react-router-devtools": "^1.139.2",
-    "@tanstack/react-start": "^1.139.2",
+    "@tanstack/react-router-ssr-query": "^1.166.11",
+    "@tanstack/react-router-with-query": "^1.130.17",
+    "@tanstack/react-start": "^1.167.0",
     "@tanstack/react-table": "^8.21.3",
     "@useautumn/convex": "^0.0.14",
     "ai": "^5.0.89",

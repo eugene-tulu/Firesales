@@ -125,9 +125,6 @@ function RegisterPage() {
           }
 
           if (data) {
-            // Wait for session to propagate before creating profile
-            await new Promise((resolve) => setTimeout(resolve, 500));
-
             // Ensure a profile exists for the newly created user
             try {
               await createProfileAfterSignup({});
@@ -136,8 +133,6 @@ function RegisterPage() {
               // eslint-disable-next-line no-console
               console.error('Failed to create profile after signup:', e);
             }
-            // Invalidate router to refresh auth state
-            await router.invalidate();
 
             // Navigate to the app after showing success message
             setTimeout(() => {
@@ -368,7 +363,7 @@ function RegisterPage() {
                     ? { email: currentEmail }
                     : {}
                 }
-                className="font-medium hover:text-muted-foreground"
+                className="font-medium text-primary hover:text-primary/80"
               >
                 Already have an account? Sign in
               </Link>

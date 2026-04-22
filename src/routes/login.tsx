@@ -115,20 +115,10 @@ function LoginPage() {
         }
 
         if (data) {
-          await router.invalidate();
+          createProfileAfterSignup({}).catch((err) =>
+            console.error('Failed to create profile:', err),
+          );
 
-          // Wait for session propagation before continuing
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
-          // Create user profile if it doesn't exist, but don't block login
-          createProfileAfterSignup({})
-            .then(() => console.log('Profile created successfully'))
-            .catch((profileError) => {
-              console.error('Failed to create profile after sign-in:', profileError);
-              // Don't show error to user - profile creation shouldn't block login
-            });
-
-          // Navigate to redirect target
           navigate({ to: redirectTarget });
         } else {
           setError('An unexpected error occurred. Please try again.');
@@ -296,7 +286,7 @@ function LoginPage() {
                     ? { email: currentEmail }
                     : {}
                 }
-                className="font-medium  hover:text-muted-foreground"
+                className="font-medium text-primary hover:text-primary/80"
               >
                 Forgot your password?
               </Link>
@@ -309,7 +299,7 @@ function LoginPage() {
                     ? { email: currentEmail }
                     : {}
                 }
-                className="font-medium  hover:text-muted-foreground"
+                className="font-medium text-primary hover:text-primary/80"
               >
                 Don't have an account? Sign up
               </Link>

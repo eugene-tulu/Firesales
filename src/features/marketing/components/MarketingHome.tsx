@@ -3,7 +3,6 @@ import { ArrowRight, Monitor, Shield, ShoppingCart, Timer, TrendingUp, Zap } fro
 import type { ComponentProps } from 'react';
 import React from 'react';
 import type { IconType } from 'react-icons';
-import { SiGithub } from 'react-icons/si';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
@@ -157,17 +156,6 @@ export function MarketingHome() {
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
-          <Button asChild variant="outline" size="lg">
-            <a
-              href="https://github.com/eugene-tulu/Firesales"
-              className="inline-flex items-center gap-2"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <SiGithub className="h-4 w-4" />
-              View on GitHub
-            </a>
-          </Button>
         </div>
       </section>
 
@@ -319,7 +307,7 @@ export function MarketingHome() {
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
-          <Button asChild variant="outline" size="lg">
+          <Button asChild variant="secondary" size="lg">
             <Link to="/login" preload="intent">
               Sign In to Dashboard
             </Link>

@@ -1,4 +1,8 @@
-import { createRouter as createTanStackRouter } from '@tanstack/react-router';
+import { createRouter } from '@tanstack/react-router';
+import { QueryClient, notifyManager } from '@tanstack/react-query';
+import { routerWithQueryClient } from '@tanstack/react-router-with-query';
+import { ConvexQueryClient } from '@convex-dev/react-query';
+import { ConvexProvider } from 'convex/react';
 import { initializeSentry } from '~/lib/sentry';
 import type { UserId } from '~/lib/shared/user-id';
 import { DefaultCatchBoundary } from './components/DefaultCatchBoundary';
@@ -17,20 +21,50 @@ export type RouterAuthContext =
     };
 
 export function getRouter() {
-  const router = createTanStackRouter({
-    routeTree,
-    defaultPreload: 'intent',
-    defaultPreloadStaleTime: 30_000, // 30 seconds
-    defaultPreloadGcTime: 5 * 60_000, // 5 minutes
-    defaultErrorComponent: DefaultCatchBoundary,
-    defaultNotFoundComponent: () => <NotFound />,
-    scrollRestoration: false, // Disabled due to $_TSR ordering bug in v1.132.47
-    // Provide default auth context - optimistic for performance
-    context: {
-      authenticated: false,
-      user: null,
-    } satisfies RouterAuthContext,
+  if (typeof document !== 'undefined') {
+    // Set up requestAnimationFrame scheduler for React Query in the browser
+    notifyManager.setScheduler(window.requestAnimationFrame);
+  }
+
+  const convexUrl = import.meta.env.VITE_CONVEX_URL!;
+  if (!convexUrl) {
+    throw new Error('VITE_CONVEX_URL is not set');
+  }
+
+  const convexQueryClient = new ConvexQueryClient(convexUrl, {
+    expectAuth: true,
   });
+
+  const queryClient: QueryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        queryKeyHashFn: convexQueryClient.hashFn(),
+        queryFn: convexQueryClient.queryFn(),
+      },
+    },
+  });
+
+  convexQueryClient.connect(queryClient);
+
+  const router = routerWithQueryClient(
+    createRouter({
+      routeTree,
+      context: {
+        queryClient,
+        convexQueryClient,
+      } satisfies { queryClient: QueryClient; convexQueryClient: ConvexQueryClient },
+      defaultPreload: 'intent',
+      defaultPreloadStaleTime: 30_000,
+      defaultPreloadGcTime: 5 * 60_000,
+      defaultErrorComponent: DefaultCatchBoundary,
+      defaultNotFoundComponent: () => <NotFound />,
+      scrollRestoration: false,
+      Wrap: ({ children }) => (
+        <ConvexProvider client={convexQueryClient.convexClient}>{children}</ConvexProvider>
+      ),
+    }),
+    queryClient,
+  );
 
   // Initialize Sentry for error tracking and performance monitoring
   initializeSentry(router);
