@@ -56,6 +56,8 @@ export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) =
           }),
         ]
       : []),
+    // Note: tanstackStartCookies() is not used in Convex functions.
+    // Cookie handling for TanStack Start is done via convexBetterAuthReactStart in src/lib/auth-server.ts
   ];
 
   return betterAuth({

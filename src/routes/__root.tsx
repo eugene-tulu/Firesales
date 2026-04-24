@@ -12,7 +12,6 @@ import { AppShell } from '~/components/AppShell';
 import { Providers } from '~/components/Providers';
 import { ErrorBoundaryWrapper } from '~/components/ErrorBoundary';
 
-// Server function to fetch auth token for SSR hydration
 const fetchAuthToken = createServerFn({ method: 'GET' }).handler(async () => {
   return await getToken();
 });
@@ -20,6 +19,8 @@ const fetchAuthToken = createServerFn({ method: 'GET' }).handler(async () => {
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
   convexQueryClient: ConvexQueryClient;
+  token?: string | null;
+  isAuthenticated: boolean;
 }>()({
   head: () => ({
     meta: [
@@ -36,7 +37,6 @@ export const Route = createRootRouteWithContext<{
     if (token && ctx.context.convexQueryClient?.serverHttpClient) {
       ctx.context.convexQueryClient.serverHttpClient.setAuth(token);
     }
-    // Return only serializable data for route context
     return { token, isAuthenticated: !!token };
   },
   component: RootComponent,
@@ -76,20 +76,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var saved = localStorage.getItem('theme');
-                  var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  var theme = saved || (systemDark ? 'dark' : 'light');
-                  if (theme === 'dark') {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
-                } catch (e) {}
-              })();
-            `,
+            __html: `(function(){try{var t=localStorage.getItem('theme'),d=window.matchMedia('(prefers-color-scheme:dark)').matches,theme=t||(d?'dark':'light');document.documentElement.classList.toggle('dark',theme==='dark')}catch(e){}})()`,
           }}
         />
         <HeadContent />

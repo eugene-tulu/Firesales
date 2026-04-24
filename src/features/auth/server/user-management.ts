@@ -1,9 +1,7 @@
 import { api } from '@convex/_generated/api';
-import { convexBetterAuthReactStart } from '@convex-dev/better-auth/react-start';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest } from '@tanstack/react-start/server';
 import { z } from 'zod';
-import { handleServerError } from '~/lib/server/error-utils.server';
+import { handleServerError } from '~/lib/server/error-utils';
 
 // Zod schemas for user management
 const signUpWithFirstAdminSchema = z.object({
@@ -11,8 +9,6 @@ const signUpWithFirstAdminSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
   name: z.string().min(1, 'Name is required'),
 });
-
-// User management functions
 
 // Custom signup server function that assigns admin role to first user
 export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
@@ -25,6 +21,10 @@ export const signUpWithFirstAdminServerFn = createServerFn({ method: 'POST' })
     }
 
     try {
+      // Dynamically import server-only modules to prevent client bundle inclusion
+      const { getRequest } = await import('@tanstack/react-start/server');
+      const { convexBetterAuthReactStart } = await import('@convex-dev/better-auth/react-start');
+
       // Get client IP and origin for rate limiting and headers
       const request = getRequest();
       const clientIP =

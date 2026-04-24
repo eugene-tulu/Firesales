@@ -1,5 +1,5 @@
 import { api } from '@convex/_generated/api';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useQuery } from 'convex/react';
 import { Package, DollarSign } from 'lucide-react';
 import { PageHeader } from '~/components/PageHeader';
@@ -8,11 +8,14 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Skeleton } from '~/components/ui/skeleton';
 import { useAuth } from '~/features/auth/hooks/useAuth';
-import { routeAuthGuard } from '~/features/auth/server/route-guards';
 
 export const Route = createFileRoute('/app/flashSales/products')({
   component: ProductsPage,
-  beforeLoad: routeAuthGuard,
+  beforeLoad: ({ context }) => {
+    if (!context.isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+  },
 });
 
 function ProductsPage() {

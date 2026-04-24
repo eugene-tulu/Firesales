@@ -1,6 +1,6 @@
 import { api } from '@convex/_generated/api';
 import { useForm } from '@tanstack/react-form';
-import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useAction, useQuery } from 'convex/react';
 import { Crown, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
@@ -34,7 +34,6 @@ function RegisterPage() {
   const passwordId = `${uid}-password`;
   const { isAuthenticated, isPending } = useAuthState();
   const navigate = useNavigate();
-  const router = useRouter();
 
   // Use useAction hook for calling Convex actions
   const createProfileAfterSignup = useAction(api.auth.createProfileAfterSignup);
@@ -133,11 +132,6 @@ function RegisterPage() {
               // eslint-disable-next-line no-console
               console.error('Failed to create profile after signup:', e);
             }
-
-            // Navigate to the app after showing success message
-            setTimeout(() => {
-              navigate({ to: '/app' });
-            }, 2000);
           } else {
             throw new Error('Sign-in returned no data');
           }

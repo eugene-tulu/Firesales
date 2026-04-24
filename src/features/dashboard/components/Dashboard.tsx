@@ -1,6 +1,6 @@
 import type { api } from '@convex/_generated/api';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '~/components/PageHeader';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
@@ -20,16 +20,6 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
   const router = useRouter();
   const { isAdmin, isPending: authPending } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const shouldInvalidate = useMemo(
-    () => !authPending && isAdmin && !isLoading && data === null,
-    [authPending, isAdmin, isLoading, data],
-  );
-
-  useEffect(() => {
-    if (shouldInvalidate) {
-      void router.invalidate();
-    }
-  }, [router, shouldInvalidate]);
 
   const handleSignOut = useCallback(async () => {
     setIsSigningOut(true);
@@ -49,12 +39,7 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
       <div className="space-y-6">
         <PageHeader
           title="Dashboard"
-          description={
-            <>
-              TanStack Start Template built with Better Auth, Convex, Tailwind CSS, Shadcn/UI,
-              Resend, and deployed to Netlify.
-            </>
-          }
+          description="Manage your flash sales, track orders, and monitor performance."
         />
 
         {/* Loading Metrics Cards */}
@@ -91,7 +76,7 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
         <div className="space-y-6">
           <PageHeader
             title="Dashboard"
-            description="TanStack Start Template built with Better Auth, Convex, Tailwind CSS, Shadcn/UI, Resend, and deployed to Netlify."
+            description="Manage your flash sales, track orders, and monitor performance."
           />
 
           <div className="bg-muted border border-border rounded-md p-6">
@@ -118,7 +103,7 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
       <div className="space-y-6">
         <PageHeader
           title="Dashboard"
-          description="TanStack Start Template built with Better Auth, Convex, Tailwind CSS, Shadcn/UI, Resend, and deployed to Netlify."
+          description="Manage your flash sales, track orders, and monitor performance."
         />
 
         <div className="bg-muted border border-border rounded-md p-6">
@@ -129,18 +114,10 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
               </h3>
               <p>
                 This can happen if your session changed or your account no longer has access. Try
-                refreshing, or sign back in to continue.
+                signing back in to continue.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => router.invalidate()}
-                disabled={isSigningOut}
-              >
-                Refresh
-              </Button>
               <Button variant="outline" size="sm" onClick={handleSignOut} disabled={isSigningOut}>
                 {isSigningOut ? 'Signing out…' : 'Sign out'}
               </Button>
@@ -155,12 +132,7 @@ export function Dashboard({ data, isLoading }: DashboardProps) {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description={
-          <>
-            TanStack Start Template built with Better Auth, Convex, Tailwind CSS, Shadcn/UI, Resend,
-            and deployed to Netlify.
-          </>
-        }
+        description="Manage your flash sales, track orders, and monitor performance."
       />
 
       {/* Error Alert */}

@@ -1,6 +1,6 @@
 import { api } from '@convex/_generated/api';
 import { useForm } from '@tanstack/react-form';
-import { createFileRoute, Link, redirect, useNavigate, useRouter } from '@tanstack/react-router';
+import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router';
 import { useAction } from 'convex/react';
 import { Lock, Mail } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
@@ -11,23 +11,6 @@ import { Field, FieldLabel } from '~/components/ui/field';
 import { InputGroup, InputGroupIcon, InputGroupInput } from '~/components/ui/input-group';
 import { signIn } from '~/features/auth/auth-client';
 import { useAuthState } from '~/features/auth/hooks/useAuthState';
-
-export const Route = createFileRoute('/login')({
-  component: LoginPage,
-  errorComponent: () => <div>Something went wrong</div>,
-  pendingComponent: AuthSkeleton,
-  validateSearch: z.object({
-    email: z
-      .string()
-      .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
-      .optional(),
-    reset: z.string().optional(),
-    redirect: z
-      .string()
-      .regex(/^\/|https?:\/\/.*$/)
-      .optional(),
-  }),
-});
 
 const REDIRECT_TARGETS = [
   '/app',
@@ -50,11 +33,33 @@ function resolveRedirectTarget(value?: string | null): RedirectTarget {
   return (match ?? '/app') as RedirectTarget;
 }
 
+export const Route = createFileRoute('/login')({
+  component: LoginPage,
+  errorComponent: () => <div>Something went wrong</div>,
+  pendingComponent: AuthSkeleton,
+  validateSearch: z.object({
+    email: z
+      .string()
+      .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+      .optional(),
+    reset: z.string().optional(),
+    redirect: z
+      .string()
+      .regex(/^\/|https?:\/\/.*$/)
+      .optional(),
+  }),
+  beforeLoad: ({ context, search }) => {
+    if (context.isAuthenticated) {
+      const redirectTarget = resolveRedirectTarget(search.redirect);
+      throw redirect({ to: redirectTarget });
+    }
+  },
+});
+
 function LoginPage() {
   const { email: emailFromQuery, reset, redirect: redirectParam } = Route.useSearch();
   const redirectTarget = resolveRedirectTarget(redirectParam);
   const navigate = useNavigate();
-  const router = useRouter();
   const { isAuthenticated, isPending } = useAuthState();
 
   // Define the action hook at the component level
@@ -169,10 +174,6 @@ function LoginPage() {
 
   if (isPending) {
     return <AuthSkeleton />;
-  }
-
-  if (isAuthenticated) {
-    throw redirect({ to: redirectTarget });
   }
 
   return (

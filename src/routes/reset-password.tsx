@@ -82,15 +82,7 @@ function ResetPasswordPage() {
         });
 
         setSuccess(true);
-
-        // Better Auth should handle auto-signin with autoSignIn: true
-        // Invalidate router to refresh auth state
-        await router.invalidate();
-
-        // Navigate to the app after showing success message
-        setTimeout(() => {
-          router.navigate({ to: '/app' });
-        }, 2000);
+        // Navigation is handled by the useEffect that watches session.user
       } catch (error: unknown) {
         if (
           (error instanceof Error && error.message?.includes('Invalid token')) ||

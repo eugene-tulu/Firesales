@@ -1,11 +1,11 @@
 import { api } from '@convex/_generated/api';
 import { redirect } from '@tanstack/react-router';
-import { getRequest } from '@tanstack/react-start/server';
 import { ConvexHttpClient } from 'convex/browser';
 import type { UserId } from '~/lib/shared/user-id';
 import { normalizeUserId } from '~/lib/shared/user-id';
 import type { UserRole } from '../types';
 import { USER_ROLES } from '../types';
+import { getToken } from '~/lib/auth-server';
 
 export interface AuthenticatedUser {
   id: UserId;
@@ -19,31 +19,15 @@ export interface AuthResult {
 }
 
 /**
- * Get the current user on the server by using the Convex JWT token from cookies.
- * This avoids HTTP calls and stream conflicts.
+ * Get the current user on the server by using Better Auth token.
  */
 async function getCurrentUserServer(): Promise<AuthenticatedUser | null> {
   if (!import.meta.env.SSR) {
     throw new Error('getCurrentUserServer must be called on the server');
   }
 
-  const request = getRequest();
-  const cookieHeader = request.headers.get('cookie');
-  if (!cookieHeader) {
-    return null;
-  }
-
-  // Parse cookies
-  const cookies = Object.fromEntries(
-    cookieHeader.split(';').map((c) => {
-      const [key, value] = c.trim().split('=');
-      return [key, decodeURIComponent(value || '')];
-    }),
-  );
-
-  // Better Auth Convex integration stores the Convex JWT in this cookie
-  const convexJwt = cookies['convex_jwt'];
-  if (!convexJwt) {
+  const token = await getToken();
+  if (!token) {
     return null;
   }
 
@@ -53,7 +37,7 @@ async function getCurrentUserServer(): Promise<AuthenticatedUser | null> {
   }
 
   const convex = new ConvexHttpClient(convexUrl);
-  convex.setAuth(convexJwt);
+  convex.setAuth(token);
 
   try {
     const profile = await convex.query(api.users.getCurrentUserProfile, {});
@@ -72,7 +56,10 @@ async function getCurrentUserServer(): Promise<AuthenticatedUser | null> {
       role: profile.role === USER_ROLES.ADMIN ? USER_ROLES.ADMIN : USER_ROLES.USER,
       name: typeof profile.name === 'string' ? profile.name : undefined,
     };
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error('[getCurrentUserServer] Failed to fetch user profile:', error);
+    }
     return null;
   }
 }

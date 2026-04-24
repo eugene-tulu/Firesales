@@ -1,7 +1,10 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router';
-import { routeAuthGuard } from '~/features/auth/server/route-guards';
+import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/dashboard/flash-sales')({
   component: () => <Outlet />,
-  beforeLoad: routeAuthGuard,
+  beforeLoad: ({ context }) => {
+    if (!context.isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+  },
 });

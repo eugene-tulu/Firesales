@@ -4,11 +4,14 @@ import { useQuery } from 'convex/react';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { useAuth } from '~/features/auth/hooks/useAuth';
-import { routeAuthGuard } from '~/features/auth/server/route-guards';
 
 export const Route = createFileRoute('/app/flashSales/')({
   component: FlashSalesDashboard,
-  beforeLoad: routeAuthGuard,
+  beforeLoad: ({ context }) => {
+    if (!context.isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+  },
   loader: async ({ context: { convexQueryClient } }) => {
     const convexClient = convexQueryClient.convexClient;
     // Server-side check - redirect if not authenticated

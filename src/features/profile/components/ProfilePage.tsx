@@ -73,12 +73,6 @@ export function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id, profile?.name, profile?.phoneNumber, isEditing, form.reset, profile]);
 
-  useEffect(() => {
-    if (error?.message === 'UNAUTHORIZED') {
-      void router.invalidate();
-    }
-  }, [error, router]);
-
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -130,9 +124,6 @@ export function ProfilePage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button variant="default" size="sm" onClick={() => router.invalidate()}>
-                  Refresh
-                </Button>
                 <Button variant="outline" size="sm" onClick={handleSignOut} disabled={isSigningOut}>
                   {isSigningOut ? 'Signing out…' : 'Sign out'}
                 </Button>

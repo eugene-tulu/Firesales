@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate, useRouter } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { LogOut, Shield, User } from 'lucide-react';
 import { MobileNavigation } from '~/components/MobileNavigation';
 import { ThemeToggle } from '~/components/theme-toggle';
@@ -24,7 +24,6 @@ function AuthNavigation({ currentPath }: { currentPath: string }) {
     fetchRole: authState.isAuthenticated,
   });
   const navigate = useNavigate();
-  const router = useRouter();
 
   const handleSignOut = async () => {
     try {
@@ -35,23 +34,20 @@ function AuthNavigation({ currentPath }: { currentPath: string }) {
           signal: AbortSignal.timeout(1000), // 10 second timeout
         },
       });
-      // Invalidate the router to clear cached auth state
-      await router.invalidate();
       // Navigate to home page after sign out
       navigate({ to: '/' });
     } catch (error) {
       console.error('❌ NAVIGATION: Error signing out:', error);
       // Still navigate to home even if signOut fails to avoid stuck auth state
-      try {
-        await router.invalidate();
-      } catch (invalidateError) {
-        console.error('Error invalidating router:', invalidateError);
-      }
       navigate({ to: '/' });
     }
   };
 
-  if (isAuthenticated || isPending) {
+  if (isPending) {
+    return <div className="w-8 h-8 rounded-full bg-secondary animate-pulse" />;
+  }
+
+  if (isAuthenticated) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

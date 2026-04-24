@@ -1,5 +1,5 @@
 import { api } from '@convex/_generated/api';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, redirect } from '@tanstack/react-router';
 import { useMutation } from 'convex/react';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
@@ -8,11 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { $scrapeProduct } from '~/lib/scrape-products';
-import { routeAuthGuard } from '~/features/auth/server/route-guards';
 
 export const Route = createFileRoute('/dashboard/flash-sales/create')({
   component: CreateFlashSale,
-  beforeLoad: routeAuthGuard,
+  beforeLoad: ({ context }) => {
+    if (!context.isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+  },
 });
 
 function CreateFlashSale() {
