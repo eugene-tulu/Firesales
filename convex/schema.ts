@@ -9,9 +9,10 @@ export default defineSchema({
   // Application-specific tables only
   // User profiles table - stores app-specific user data that references Better Auth user IDs
   userProfiles: defineTable({
-    userId: v.string(), // References Better Auth user.id
-    role: v.union(v.literal('user'), v.literal('admin')), // Enforced enum for data integrity
-    // Add other app-specific user fields here as needed
+    userId: v.string(),
+    role: v.union(v.literal('seller'), v.literal('platform_admin'), v.literal('user'), v.literal('admin')),
+    dodoConnected: v.optional(v.boolean()),
+    freeScrapesUsed: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -19,8 +20,7 @@ export default defineSchema({
     .index('by_role_createdAt', ['role', 'createdAt']),
 
   auditLogs: defineTable({
-    id: v.string(),
-    userId: v.string(), // References Better Auth user.id
+    userId: v.string(),
     action: v.string(),
     entityType: v.string(),
     entityId: v.optional(v.string()),
@@ -95,23 +95,20 @@ export default defineSchema({
 
   // FireSales tables
   products: defineTable({
+    sellerId: v.optional(v.string()),
     userId: v.string(),
     name: v.string(),
     description: v.string(),
     price: v.number(),
     imageUrl: v.string(),
     url: v.string(),
-    status: v.union(
-      v.literal('draft'),
-      v.literal('active'),
-      v.literal('paused'),
-      v.literal('sold_out'),
-      v.literal('ended'),
-    ),
+    status: v.union(v.literal('draft'), v.literal('active'), v.literal('paused'), v.literal('sold_out'), v.literal('ended')),
+    scrapeCreditsUsed: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
     publishedAt: v.optional(v.number()),
   })
+    .index('by_sellerId', ['sellerId'])
     .index('by_userId', ['userId'])
     .index('by_createdAt', ['createdAt'])
     .index('by_status', ['status']),
@@ -131,9 +128,9 @@ export default defineSchema({
   flashSales: defineTable({
     productId: v.id('products'),
     allocatedInventory: v.number(),
-    saleUrl: v.string(), // Unique URL for this flash sale
-    status: v.union(v.literal('draft'), v.literal('live'), v.literal('completed')),
-    userId: v.string(), // Seller ID
+    saleUrl: v.string(),
+    status: v.union(v.literal('draft'), v.literal('pending_payment_setup'), v.literal('live'), v.literal('completed')),
+    userId: v.string(),
     totalSales: v.number(),
     totalRevenue: v.number(),
     remainingInventory: v.number(),
@@ -190,4 +187,30 @@ export default defineSchema({
     .index('by_dodoPaymentId', ['dodoPaymentId'])
     .index('by_status', ['status'])
     .index('by_createdAt', ['createdAt']),
+
+  // System status table for circuit breakers and health monitoring
+  systemStatus: defineTable({
+    key: v.string(),
+    state: v.object({
+      consecutiveFailures: v.number(),
+      lastFailure: v.optional(v.number()),
+      circuitOpen: v.boolean(),
+    }),
+    updatedAt: v.number(),
+    createdAt: v.number(),
+  }).index('by_key', ['key']),
+
+  // Payment saga log for cross-system consistency and idempotency
+  paymentSagaLog: defineTable({
+    paymentId: v.string(), // External payment ID (e.g., Dodo payment ID)
+    event: v.string(), // 'checkout.completed', 'checkout.failed', etc.
+    payload: v.any(), // Raw event payload
+    outcome: v.object({
+      success: v.boolean(),
+      userId: v.optional(v.string()),
+      error: v.optional(v.string()),
+    }),
+    processedAt: v.number(),
+    createdAt: v.number(),
+  }).index('by_paymentId', ['paymentId']),
 });

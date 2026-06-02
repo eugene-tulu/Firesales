@@ -33,6 +33,9 @@ export function useProfile() {
 
 // Hook to update user profile with optimistic updates and rollback
 export function useUpdateProfile() {
+  // Get current profile to obtain updatedAt for optimistic locking
+  const { data: profile } = useProfile();
+
   // Use optimistic mutation utility for automatic rollback on error
   const updateProfileOptimistic = useOptimisticMutation(api.users.updateCurrentUserProfile, {
     onSuccess: () => {
@@ -45,10 +48,14 @@ export function useUpdateProfile() {
 
   return {
     mutateAsync: async (data: UpdateProfileData) => {
-      // Optimistic mutation with automatic rollback on error
+      if (!profile) {
+        throw new Error('Profile not loaded');
+      }
+
       await updateProfileOptimistic({
         name: data.name || undefined,
         phoneNumber: data.phoneNumber || undefined,
+        lastKnownUpdatedAt: profile.updatedAt.getTime(),
       });
 
       // Convex automatically invalidates queries, so the profile data will update

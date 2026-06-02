@@ -173,7 +173,13 @@ async function main() {
   }
 
   // Read the BETTER_AUTH_SECRET from .env.local
-  const betterAuthSecret = envContent.match(/BETTER_AUTH_SECRET=(.+)/)?.[1];
+  const envContentClean = envContent
+    .split('\n')
+    .map((line) => line.replace(/#.*/, '').trim())
+    .filter((line) => line.length > 0)
+    .join('\n');
+
+  const betterAuthSecret = envContentClean.match(/^BETTER_AUTH_SECRET=(.*)$/m)?.[1]?.trim();
 
   if (!betterAuthSecret) {
     console.log('❌ Could not find BETTER_AUTH_SECRET in .env.local');
@@ -190,17 +196,21 @@ async function main() {
     console.log('────────────────────────────────────────────────');
   }
 
-  // Set required environment variables in Convex
-  const envVars = [
-    { name: 'BETTER_AUTH_SECRET', value: betterAuthSecret },
-    { name: 'RESEND_EMAIL_SENDER', value: 'onboarding@resend.dev' },
-    { name: 'APP_NAME', value: 'TanStack Start Template' },
-  ];
+  const envVarDefaults: Record<string, string> = {
+    BETTER_AUTH_SECRET: betterAuthSecret,
+    APP_NAME: 'TanStack Start Template',
+    RESEND_EMAIL_SENDER: 'onboarding@resend.dev',
+  };
+
+  const envVars = Object.entries(envVarDefaults).map(([name, fallback]) => {
+    const match = envContentClean.match(new RegExp(`^${name}=(.*)$`, 'm'));
+    return { name, value: match?.[1]?.trim() ?? fallback };
+  });
 
   for (const { name, value } of envVars) {
     try {
       console.log(`   Setting ${name}...`);
-      execSync(`npx convex env set ${name} "${value}"`, {
+      execSync(`npx convex env set ${name} "${value.replace(/"/g, '\\"')}"`, {
         stdio: 'pipe',
         cwd: process.cwd(),
       });

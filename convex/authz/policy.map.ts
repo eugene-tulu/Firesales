@@ -22,18 +22,18 @@ export type Capability =
   | 'dashboard.read';
 
 export const Caps = {
-  'route:/app': ['user', 'admin'],
-  'route:/app/admin': ['admin'],
-  'route:/app/admin.users': ['admin'],
-  'route:/app/admin.stats': ['admin'],
-  'route:/app/profile': ['user', 'admin'],
-  'user.write': ['admin'],
-  'user.bootstrap': ['public', 'user', 'admin'], // Bootstrap allowed for everyone, but logic restricts it
-  'profile.read': ['user', 'admin'],
-  'profile.write': ['user', 'admin'],
-  'util.firstUserCheck': ['public', 'user', 'admin'],
-  'util.emailServiceStatus': ['public', 'user', 'admin'],
-  'dashboard.read': ['admin'], // Admin dashboard data
+  'route:/app': ['seller', 'platform_admin'],
+  'route:/app/admin': ['platform_admin'],
+  'route:/app/admin.users': ['platform_admin'],
+  'route:/app/admin.stats': ['platform_admin'],
+  'route:/app/profile': ['seller', 'platform_admin'],
+  'user.write': ['platform_admin'],
+  'user.bootstrap': ['public', 'seller', 'platform_admin'],
+  'profile.read': ['seller', 'platform_admin'],
+  'profile.write': ['seller', 'platform_admin'],
+  'util.firstUserCheck': ['public', 'seller', 'platform_admin'],
+  'util.emailServiceStatus': ['public', 'seller', 'platform_admin'],
+  'dashboard.read': ['platform_admin'],
 } as const;
 
 export const PublicCaps = new Set<Capability>([

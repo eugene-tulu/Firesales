@@ -2,12 +2,13 @@ import { createClient } from '@convex-dev/better-auth';
 import { convex } from '@convex-dev/better-auth/plugins';
 import { dodopayments, portal } from '@dodopayments/better-auth';
 import { betterAuth } from 'better-auth';
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { DodoPayments } from 'dodopayments';
 import { getBetterAuthSecret, getSiteUrl } from '../src/lib/server/env.server';
+import type { UserId } from '../src/lib/shared/user-id';
 import { api, components, internal } from './_generated/api';
 import type { DataModel } from './_generated/dataModel';
-import { action, mutation, query } from './_generated/server';
+import { action, internalAction, mutation, query } from './_generated/server';
 import authConfig from './auth.config';
 
 const siteUrl = getSiteUrl();
@@ -40,8 +41,11 @@ export const dodoPayments: any = dodoApiKey
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) => {
+  console.log('[createAuth] siteUrl:', siteUrl);
   const plugins = [
-    convex({ authConfig }),
+    convex({
+      authConfig,
+    }),
     ...(dodoApiKey
       ? [
           dodopayments({
@@ -102,6 +106,21 @@ export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) =
           },
         );
 
+        // Also apply account-based rate limiting (if user exists)
+        if (user) {
+          const accountRateLimitKey = `passwordReset:account:${user.id}`;
+          await ctxWithRunMutation.runMutation(components.rateLimiter.lib.rateLimit, {
+            name: 'passwordReset',
+            key: accountRateLimitKey,
+            config: {
+              kind: 'token bucket',
+              rate: 3,
+              period: 60 * 60 * 1000,
+              capacity: 3,
+            },
+          });
+        }
+
         if (!rateLimitResult.ok) {
           throw new Error(
             `Rate limit exceeded. Too many password reset requests. Please try again in ${Math.ceil(
@@ -152,6 +171,50 @@ if (!internalRateLimitToken) {
   throw new Error('BETTER_AUTH_SECRET environment variable is required');
 }
 
+// Circuit breaker key for rate limiter
+const RATE_LIMITER_BREAKER_KEY = 'rate_limiter_breaker';
+
+// Circuit breaker state management
+async function getBreakerState(ctx: any) {
+  const doc = await ctx.db
+    .query('systemStatus')
+    .withIndex('by_key', (q: any) => q.eq('key', RATE_LIMITER_BREAKER_KEY))
+    .first();
+
+  if (doc) {
+    return doc.state;
+  }
+
+  return {
+    consecutiveFailures: 0,
+    lastFailure: null,
+    circuitOpen: false,
+  };
+}
+
+async function updateBreakerState(
+  ctx: any,
+  updates: { consecutiveFailures: number; lastFailure: number | null; circuitOpen: boolean },
+) {
+  await ctx.db.upsert(
+    'systemStatus',
+    { key: RATE_LIMITER_BREAKER_KEY },
+    {
+      state: updates,
+      updatedAt: Date.now(),
+      createdAt: Date.now(),
+    },
+  );
+}
+
+async function resetBreakerState(ctx: any) {
+  await updateBreakerState(ctx, {
+    consecutiveFailures: 0,
+    lastFailure: null,
+    circuitOpen: false,
+  });
+}
+
 // Action wrapper for rate limiting
 export const rateLimitAction = action({
   args: {
@@ -175,15 +238,51 @@ export const rateLimitAction = action({
   },
   handler: async (ctx, args) => {
     if (args.token !== internalRateLimitToken) {
-      throw new Error('Unauthorized rate limit access');
+      throw new ConvexError('Unauthorized rate limit access');
+    }
+
+    // Circuit breaker check
+    const breaker = await getBreakerState(ctx);
+    const now = Date.now();
+    const BREAKER_THRESHOLD = 5; // failures before opening
+    const BREAKER_TIMEOUT = 30_000; // 30 seconds
+
+    if (breaker.circuitOpen) {
+      if (breaker.lastFailure && now - breaker.lastFailure < BREAKER_TIMEOUT) {
+        // Circuit is open — fail closed
+        throw new ConvexError('Rate limiting service temporarily unavailable');
+      }
+      // Half-open: allow one attempt to test recovery, reset state
+      await resetBreakerState(ctx);
     }
 
     const { token: _token, ...rateLimitArgs } = args;
     try {
-      return await ctx.runMutation(components.rateLimiter.lib.rateLimit, rateLimitArgs as any);
+      const result = await ctx.runMutation(
+        components.rateLimiter.lib.rateLimit,
+        rateLimitArgs as any,
+      );
+
+      // Success — reset breaker
+      await resetBreakerState(ctx);
+      return result;
     } catch (error) {
-      console.error('Rate limit action failed:', error);
-      return { ok: true, retryAfter: 0 };
+      // Record failure
+      const failures = breaker.consecutiveFailures + 1;
+      await updateBreakerState(ctx, {
+        consecutiveFailures: failures,
+        lastFailure: now,
+        circuitOpen: failures >= BREAKER_THRESHOLD,
+      });
+
+      console.error('[RATE_LIMIT_FAIL]', {
+        error,
+        failures,
+        circuitOpen: failures >= BREAKER_THRESHOLD,
+      });
+
+      // Fail-closed — never bypass rate limiting due to errors
+      throw new ConvexError('Rate limiting service temporarily unavailable');
     }
   },
 });
@@ -204,40 +303,35 @@ export const getCurrentUser = query({
 export const createProfileAfterSignup = action({
   args: {},
   handler: async (ctx) => {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        const authUser = await authComponent.getAuthUser(ctx);
-        if (authUser) {
-          const typed = authUser as { id?: string; _id?: string } | undefined;
-          const userId = typed?.id || typed?._id;
-          if (!userId) {
-            throw new Error('User ID not found');
-          }
-
-          const existingProfile = await ctx.runQuery(api.users.getCurrentUserProfile);
-          if (existingProfile) {
-            return { success: true, message: 'Profile already exists' };
-          }
-
-          const userCountResult = await ctx.runQuery(api.users.getUserCount, {});
-          const isFirstUser = userCountResult.isFirstUser;
-
-          await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
-            userId,
-            role: isFirstUser ? 'admin' : 'user',
-          });
-
-          return { success: true, message: 'Profile created successfully' };
-        }
-      } catch (error) {
-        if (attempt === 4) {
-          console.error('Failed to create profile after multiple attempts:', error);
-          throw error;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
-      }
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new ConvexError('Unauthenticated');
     }
 
-    throw new Error('Not authenticated after multiple attempts');
+    const userId = identity.subject.split('|')[0] as UserId;
+
+    const existingProfile = await ctx.runQuery(api.users.getCurrentUserProfile);
+    if (existingProfile) {
+      return { success: true, message: 'Profile already exists' };
+    }
+
+    const userCountResult = await ctx.runQuery(api.users.getUserCount, {});
+    const isFirstUser = userCountResult.isFirstUser;
+
+    await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
+      userId,
+      role: isFirstUser ? 'platform_admin' : 'seller',
+    });
+
+    return { success: true, message: 'Profile created successfully' };
+  },
+});
+
+// Get latest JWKS for token signing key rotation
+export const getLatestJwks = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const auth = createAuth(ctx);
+    return await auth.api.getLatestJwks();
   },
 });

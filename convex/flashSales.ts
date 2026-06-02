@@ -80,27 +80,22 @@ export const create = mutation({
   },
 });
 
-// Get all flash sales for a user
 export const list = query({
   args: {},
   handler: async (ctx) => {
     const authUser = await authComponent.getAuthUser(ctx);
-    const userId = assertUserId(authUser, 'Authentication required');
+    const sellerId = assertUserId(authUser, 'Authentication required');
 
     const flashSales = await ctx.db
       .query('flashSales')
-      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .withIndex('by_userId', (q) => q.eq('userId', sellerId))
       .order('desc')
       .collect();
 
-    // Get product information for each flash sale
     const flashSalesWithProducts = await Promise.all(
       flashSales.map(async (flashSale) => {
         const product = await ctx.db.get(flashSale.productId);
-        return {
-          ...flashSale,
-          product,
-        };
+        return { ...flashSale, product };
       }),
     );
 
@@ -108,14 +103,21 @@ export const list = query({
   },
 });
 
-// Get flash sale by ID
+// Get a single flash sale by ID — verifies ownership
 export const get = query({
   args: {
     flashSaleId: v.id('flashSales'),
   },
   handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    if (!authUser) return null;
+
+    const sellerId = assertUserId(authUser, 'Authentication required');
+
     const flashSale = await ctx.db.get(args.flashSaleId);
-    if (!flashSale) {
+    if (!flashSale) return null;
+
+    if (flashSale.userId !== sellerId) {
       return null;
     }
 
@@ -132,6 +134,7 @@ export const get = query({
 export const getBySaleUrl = query({
   args: {
     saleUrl: v.string(),
+    viewerUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const flashSale = await ctx.db
@@ -143,16 +146,18 @@ export const getBySaleUrl = query({
       return null;
     }
 
-    // Only return flash sale if it's live
-    if (flashSale.status !== 'live') {
+    const product = await ctx.db.get(flashSale.productId);
+
+    const isPreviewing = args.viewerUserId === flashSale.userId;
+    const showPreview = flashSale.status === 'draft' || flashSale.status === 'live';
+    if (!showPreview && !isPreviewing) {
       return null;
     }
-
-    const product = await ctx.db.get(flashSale.productId);
 
     return {
       ...flashSale,
       product,
+      isPreview: flashSale.status === 'draft',
     };
   },
 });

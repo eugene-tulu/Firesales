@@ -1,6 +1,6 @@
 import { sha256 } from 'js-sha256';
-import { v } from 'convex/values';
-import { api, components } from './_generated/api';
+import { v, ConvexError } from 'convex/values';
+import { api, components, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { httpAction, mutation, action } from './_generated/server';
 import { dodoPayments } from './auth';
@@ -116,6 +116,9 @@ export const createCheckoutSession = mutation({
  * Dodo Payments webhook HTTP endpoint
  * Receives signed POST requests from Dodo and processes payment events
  */
+/**
+ * Dodo Payments webhook HTTP endpoint with saga pattern and idempotency
+ */
 export const handleDodoWebhook = httpAction(
   async (ctx: any, request: Request): Promise<Response> => {
     const webhookSecret = process.env.DODO_PAYMENTS_WEBHOOK_SECRET;
@@ -155,6 +158,23 @@ export const handleDodoWebhook = httpAction(
 
       console.log(`Received Dodo webhook: ${event.type}`, metadata);
 
+      // Generate stable paymentId for idempotency
+      const paymentId =
+        event.data?.cart_id || event.data?.payment_id || event.id || `${event.type}-${Date.now()}`;
+
+      // Idempotency check: if already processed, short-circuit
+      const existingSaga = await ctx.db
+        .query('paymentSagaLog')
+        .withIndex('by_paymentId', (q: any) => q.eq('paymentId', paymentId))
+        .first();
+
+      if (existingSaga) {
+        return new Response(JSON.stringify({ received: true, idempotent: true }), { status: 200 });
+      }
+
+      // Track outcome for saga log
+      let outcome: { success: boolean; userId?: string; error?: string } = { success: false };
+
       switch (event.type) {
         case 'payment.succeeded':
           console.log(`Payment succeeded for reservation ${reservationId}`);
@@ -165,17 +185,15 @@ export const handleDodoWebhook = httpAction(
               const reservation = await ctx.db.get(reservationId);
               if (!reservation) {
                 console.error(`Reservation not found: ${reservationId}`);
-                return new Response(JSON.stringify({ error: 'Reservation not found' }), {
-                  status: 404,
-                });
+                outcome.error = 'Reservation not found';
+                break;
               }
 
               const product = await ctx.db.get((reservation as any).productId);
               if (!product) {
                 console.error(`Product not found: ${(reservation as any).productId}`);
-                return new Response(JSON.stringify({ error: 'Product not found' }), {
-                  status: 404,
-                });
+                outcome.error = 'Product not found';
+                break;
               }
 
               const amount = (product as any).price * (reservation as any).quantity;
@@ -187,7 +205,7 @@ export const handleDodoWebhook = httpAction(
                 amount,
                 currency: 'usd',
                 sessionId,
-                dodoPaymentId: event.data.cart_id || event.data.payment_id || event.id,
+                dodoPaymentId: paymentId,
               });
 
               if (flashSaleId) {
@@ -199,10 +217,24 @@ export const handleDodoWebhook = httpAction(
               }
 
               console.log(`Order created successfully: ${orderResult.orderId}`);
-            } catch (error) {
+              outcome.success = true;
+              outcome.userId = (reservation as any).userId;
+            } catch (error: any) {
               console.error('Error processing successful payment:', error);
+              outcome.error = error.message;
+              // Record failure to prevent retry storms for permanent errors
+              await ctx.db.insert('paymentSagaLog', {
+                paymentId,
+                event: event.type,
+                payload: event,
+                outcome,
+                processedAt: Date.now(),
+                createdAt: Date.now(),
+              });
               return new Response(JSON.stringify({ error: 'Processing failed' }), { status: 500 });
             }
+          } else {
+            outcome.error = 'Missing reservationId or sessionId';
           }
           break;
 
@@ -213,19 +245,35 @@ export const handleDodoWebhook = httpAction(
             try {
               await ctx.runMutation(api.inventory.releaseReservation, { reservationId, sessionId });
               console.log(`Reservation released due to ${event.type}: ${reservationId}`);
-            } catch (error) {
+              outcome.success = true;
+            } catch (error: any) {
               console.error(`Error releasing reservation after ${event.type}:`, error);
+              outcome.error = error.message;
             }
           }
           break;
 
         case 'refund.succeeded':
           console.log(`Refund processed: ${event.id}`);
+          outcome.success = true;
           break;
 
         default:
           console.log(`Unhandled Dodo webhook event type: ${event.type}`);
+          // Mark as handled to prevent retry for unknown events
+          outcome.success = true;
+          break;
       }
+
+      // Record saga outcome (success or handled outcome)
+      await ctx.db.insert('paymentSagaLog', {
+        paymentId,
+        event: event.type,
+        payload: event,
+        outcome,
+        processedAt: Date.now(),
+        createdAt: Date.now(),
+      });
 
       return new Response(JSON.stringify({ received: true }), { status: 200 });
     } catch (error) {
@@ -243,6 +291,7 @@ export const auditPaymentAction = mutation({
     orderId: v.optional(v.id('orders')),
     action: v.string(),
     details: v.string(),
+    entityType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const authUser = await ctx.auth.getUserIdentity();
@@ -250,10 +299,17 @@ export const auditPaymentAction = mutation({
       throw new Error('Authentication required');
     }
 
-    // FIXME: Implement proper audit logging table
-    console.log(
-      `AUDIT: User ${authUser.subject} performed ${args.action} on order ${args.orderId}: ${args.details}`,
-    );
+    // Write audit entry directly
+    await ctx.db.insert('auditLogs', {
+      userId: authUser.subject,
+      action: args.action,
+      entityType: args.entityType || 'order',
+      entityId: args.orderId?.toString(),
+      metadata: args.details,
+      createdAt: Date.now(),
+      ipAddress: (ctx as any).request?.headers.get('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: (ctx as any).request?.headers.get('user-agent') || undefined,
+    });
 
     return { success: true };
   },

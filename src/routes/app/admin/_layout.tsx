@@ -8,7 +8,7 @@ export const Route = createFileRoute('/app/admin/_layout')({
     if (!context.isAuthenticated) {
       throw redirect({ to: '/login' });
     }
-    if (context.user?.role !== 'admin') {
+    if (context.user?.role !== 'platform_admin') {
       throw redirect({ to: '/app' });
     }
   },

@@ -128,7 +128,7 @@ export const getAllUsers = guarded.query(
     ),
     secondarySortOrder: v.union(v.literal('asc'), v.literal('desc')),
     search: v.optional(v.string()),
-    role: v.union(v.literal('all'), v.literal('user'), v.literal('admin')),
+    role: v.union(v.literal('all'), v.literal('seller'), v.literal('platform_admin')),
     cursor: v.optional(v.string()), // Add cursor for efficient pagination
   },
   async (ctx, args, _role) => {
@@ -171,7 +171,7 @@ export const getAllUsers = guarded.query(
           id: profile.userId,
           email: authUser.email,
           name: authUser.name || null,
-          role: profile.role as 'user' | 'admin',
+          role: profile.role as 'seller' | 'platform_admin',
           emailVerified: authUser.emailVerified || false,
           createdAt: profile.createdAt,
           updatedAt: profile.updatedAt,
@@ -467,9 +467,9 @@ export const deleteUser = guarded.mutation(
       .first();
 
     // Prevent deletion of the only admin user
-    if (targetProfile?.role === 'admin') {
+    if (targetProfile?.role === 'platform_admin') {
       const allProfiles = await ctx.db.query('userProfiles').collect();
-      const adminCount = allProfiles.filter((p) => p.role === 'admin').length;
+      const adminCount = allProfiles.filter((p) => p.role === 'platform_admin').length;
       if (adminCount <= 1) {
         throw new Error('Cannot delete the only admin user. At least one admin must remain.');
       }

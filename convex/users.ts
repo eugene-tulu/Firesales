@@ -1,11 +1,11 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import {
   type BetterAuthAdapterUserDoc,
   normalizeAdapterFindManyResult,
 } from '../src/lib/server/better-auth/adapter-utils';
 import { assertUserId } from '../src/lib/shared/user-id';
-import { components, internal } from './_generated/api';
-import { internalQuery, mutation, query } from './_generated/server';
+import { api, components, internal } from './_generated/api';
+import { action, internalQuery, mutation, query } from './_generated/server';
 import { authComponent } from './auth';
 import { guarded } from './authz/guardFactory';
 
@@ -57,7 +57,7 @@ export const setUserRole = guarded.mutation(
   'user.bootstrap', // Public capability but with strict bootstrap logic
   {
     userId: v.string(), // Better Auth user ID
-    role: v.union(v.literal('user'), v.literal('admin')), // Enforced enum
+    role: v.union(v.literal('seller'), v.literal('platform_admin')), // Enforced enum
     allowBootstrap: v.optional(v.boolean()), // Special flag for first user signup
   },
   async (ctx, args, role) => {
@@ -101,6 +101,8 @@ export const setUserRole = guarded.mutation(
       await ctx.db.insert('userProfiles', {
         userId: args.userId,
         role: args.role,
+        dodoConnected: false,
+        freeScrapesUsed: 0,
         createdAt: now,
         updatedAt: now,
       });
@@ -121,11 +123,15 @@ export const setUserRole = guarded.mutation(
  *
  * Authorization is enforced by Better Auth's `getAuthUser`, so this remains a
  * plain mutation rather than `guarded.mutation('profile.write', ...)`.
+ *
+ * Includes optimistic locking to prevent lost updates.
  */
 export const updateCurrentUserProfile = mutation({
   args: {
     name: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
+    // Client must provide the updatedAt they last saw for optimistic concurrency control
+    lastKnownUpdatedAt: v.number(),
   },
   handler: async (ctx, args) => {
     // Get current user
@@ -136,7 +142,24 @@ export const updateCurrentUserProfile = mutation({
 
     const userId = assertUserId(authUser, 'User ID not found in auth user');
 
-    // Build update object - only include fields that are provided
+    // Find current profile
+    const profile = await ctx.db
+      .query('userProfiles')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .first();
+
+    if (!profile) {
+      throw new ConvexError('Profile not found');
+    }
+
+    // Optimistic concurrency check
+    if (profile.updatedAt !== args.lastKnownUpdatedAt) {
+      throw new ConvexError(
+        'Profile was modified by another process. Please refresh and try again.',
+      );
+    }
+
+    // Build update object
     const updateData: {
       name?: string;
       phoneNumber?: string | null;
@@ -153,25 +176,8 @@ export const updateCurrentUserProfile = mutation({
       updateData.phoneNumber = args.phoneNumber || null;
     }
 
-    // Use Better Auth component adapter's updateMany mutation
-    await ctx.runMutation(components.betterAuth.adapter.updateMany, {
-      input: {
-        model: 'user',
-        update: updateData,
-        where: [
-          {
-            field: '_id',
-            operator: 'eq',
-            value: userId,
-          },
-        ],
-      },
-      paginationOpts: {
-        cursor: null,
-        numItems: 1, // Only updating one user
-        id: 0, // Not used but required
-      },
-    });
+    // Perform update with optimistic lock
+    await ctx.db.patch(profile._id, updateData);
 
     return { success: true };
   },
@@ -250,11 +256,57 @@ export const getCurrentUserProfile = query({
       email: authUserTyped.email || '',
       name: authUserTyped.name || null,
       phoneNumber: authUserTyped.phoneNumber || null,
-      role: profile?.role || 'user', // Default to 'user' if no profile exists yet
+      role: profile?.role || 'seller', // Default to 'seller' if no profile exists yet
       emailVerified: authUserTyped.emailVerified || false,
       createdAt,
       updatedAt,
     };
+  },
+});
+
+/**
+ * Get or create user profile with invariant enforcement.
+ * Guarantees: profile always exists for authenticated user.
+ * Uses existing queries/mutations to avoid direct DB access.
+ *
+ * This is an action because it may create a profile (write side-effect).
+ * Prefer this when you require the profile to exist (e.g., during checkout).
+ */
+export const getOrCreateProfile = action({
+  args: {},
+  handler: async (ctx: any, _args: any): Promise<any> => {
+    // Get current user via auth
+    const authUser = await authComponent.getAuthUser(ctx);
+    if (!authUser) {
+      return null;
+    }
+    const userId = assertUserId(authUser, 'User ID not found');
+
+    // Check if profile already exists (reuse existing query)
+    const existing = await ctx.runQuery(api.users.getCurrentUserProfile, {});
+    if (existing) {
+      return existing;
+    }
+
+    // Profile missing — create it
+    // Determine role based on first user
+    const userCountResult = await ctx.runQuery(api.users.getUserCount, {});
+    const isFirstUser = userCountResult.isFirstUser;
+    const role = isFirstUser ? 'platform_admin' : 'seller';
+
+    // Create profile (idempotent via existing check inside mutation)
+    await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
+      userId,
+      role,
+    });
+
+    // Fetch the newly created profile
+    const profile = await ctx.runQuery(api.users.getCurrentUserProfile, {});
+    if (!profile) {
+      throw new ConvexError('Failed to create user profile');
+    }
+
+    return profile;
   },
 });
 
@@ -266,7 +318,7 @@ export const updateUserRole = guarded.mutation(
   'user.write',
   {
     userId: v.string(),
-    role: v.union(v.literal('user'), v.literal('admin')), // Enforced enum
+    role: v.union(v.literal('seller'), v.literal('platform_admin')), // Enforced enum
   },
   async (ctx, args, _role) => {
     // Role validation is now handled by the Convex schema enum
@@ -274,7 +326,7 @@ export const updateUserRole = guarded.mutation(
     // Update role in userProfiles
     const profile = await ctx.db
       .query('userProfiles')
-      .withIndex('by_userId', (q) => q.eq('userId', args.userId))
+      .withIndex('by_userId', (q: any) => q.eq('userId', args.userId))
       .first();
 
     if (!profile) {

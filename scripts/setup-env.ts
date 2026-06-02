@@ -8,7 +8,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { generateSecret } from '../src/lib/server/crypto.server';
 
@@ -29,16 +29,19 @@ async function main() {
 
   const envPath = join(process.cwd(), '.env.local');
 
-  // Check if .env.local already exists
-  if (existsSync(envPath)) {
-    console.log('⚠️  .env.local already exists!');
-    console.log('   To avoid overwriting existing configuration, here are your generated secrets:');
-    console.log('────────────────────────────────────────────────');
-    console.log(`BETTER_AUTH_SECRET=${authSecret}`);
-    console.log('────────────────────────────────────────────────\n');
-    console.log('📝 Add these to your existing .env.local file.');
-    return;
-  }
+   // Check if .env.local already exists
+   if (existsSync(envPath)) {
+     const existing = readFileSync(envPath, 'utf8');
+     const hasSecret = /^BETTER_AUTH_SECRET=/m.test(existing);
+     if (hasSecret) {
+       console.log('✅ .env.local already configured. No changes made.');
+       return;
+     }
+     const secretLine = `BETTER_AUTH_SECRET=${authSecret}\n`;
+     appendFileSync(envPath, secretLine);
+     console.log('✅ Added BETTER_AUTH_SECRET to existing .env.local.');
+     return;
+   }
 
   // Create .env.local with all defaults
   const envContent = `# Local Development Environment

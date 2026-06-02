@@ -62,8 +62,8 @@ function LoginPage() {
   const navigate = useNavigate();
   const { isAuthenticated, isPending } = useAuthState();
 
-  // Define the action hook at the component level
-  const createProfileAfterSignup = useAction(api.auth.createProfileAfterSignup);
+  // Use getOrCreateProfile action to ensure user profile exists (idempotent)
+  const getOrCreateProfile = useAction(api.users.getOrCreateProfile);
 
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -120,9 +120,13 @@ function LoginPage() {
         }
 
         if (data) {
-          createProfileAfterSignup({}).catch((err) =>
-            console.error('Failed to create profile:', err),
-          );
+          // Ensure profile exists (idempotent)
+          try {
+            await getOrCreateProfile({});
+          } catch (err) {
+            console.error('Failed to ensure profile after login:', err);
+            // Non-blocking: continue to redirect
+          }
 
           navigate({ to: redirectTarget });
         } else {

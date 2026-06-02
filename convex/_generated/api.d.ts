@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
 import type * as aiResponses from "../aiResponses.js";
+import type * as auditLogs from "../auditLogs.js";
 import type * as auth from "../auth.js";
 import type * as authz_guardFactory from "../authz/guardFactory.js";
 import type * as autumn from "../autumn.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   ai: typeof ai;
   aiResponses: typeof aiResponses;
+  auditLogs: typeof auditLogs;
   auth: typeof auth;
   "authz/guardFactory": typeof authz_guardFactory;
   autumn: typeof autumn;

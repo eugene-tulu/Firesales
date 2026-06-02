@@ -10,6 +10,38 @@ import { Separator } from '~/components/ui/separator';
 import { ShoppingCart, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export const Route = createFileRoute('/live/$saleUrl')({
+  loader: async ({ context, params }) => {
+    const saleUrl = params.saleUrl as string;
+    const result = await context.queryClient.ensureQueryData(
+      api.flashSales.getBySaleUrl,
+      { saleUrl },
+    );
+    if (!result) {
+      throw new Error('Flash sale not found');
+    }
+    return { saleUrl, productName: result.product.name };
+  },
+  head: ({ data }) => {
+    const title = data?.productName
+      ? `${data.productName} — Firesales`
+      : 'Flash Sale — Firesales';
+    const description = data?.productName
+      ? `Don't miss this flash sale: ${data.productName}. Limited time, limited stock.`
+      : 'Check out this flash sale on Firesales.';
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { property: 'og:title', content: title },
+        { property: 'og:description', content: description },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:site_name', content: 'Firesales' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:title', content: title },
+        { name: 'twitter:description', content: description },
+      ],
+    };
+  },
   component: PublicFlashSalePage,
 });
 

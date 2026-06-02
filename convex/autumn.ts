@@ -156,3 +156,23 @@ export const isAutumnReady = action({
     configured: isAutumnConfigured(),
   }),
 });
+
+export const checkAutumnCredits = action({
+  args: {
+    customerId: v.string(),
+    featureId: v.string(),
+  },
+  handler: async (_ctx: ActionCtx, args) => {
+    try {
+      const result = await check({
+        customerId: args.customerId,
+        featureId: args.featureId,
+      });
+
+      const allowed = (result as any)?.allowed ?? true;
+      return { allowed };
+    } catch {
+      return { allowed: true };
+    }
+  },
+});

@@ -203,8 +203,8 @@ export function FlashSaleCreation() {
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            navigator.clipboard.writeText(
-                              `${window.location.origin}/sale/${flashSale.saleUrl}`,
+                              navigator.clipboard.writeText(
+                                `${window.location.origin}/live/${flashSale.saleUrl}`,
                             )
                           }
                         >

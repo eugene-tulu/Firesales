@@ -40,7 +40,7 @@ async function resolveRole(
     profile = await ctx.runQuery(internal.users.getUserProfile, { userId });
   }
 
-  const role = profile?.role || 'user';
+  const role = profile?.role || 'seller';
 
   // Check if the role has the required capability
   const allowedRoles = Caps[cap] ?? [];

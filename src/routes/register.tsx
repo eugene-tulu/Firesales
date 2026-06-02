@@ -35,8 +35,8 @@ function RegisterPage() {
   const { isAuthenticated, isPending } = useAuthState();
   const navigate = useNavigate();
 
-  // Use useAction hook for calling Convex actions
-  const createProfileAfterSignup = useAction(api.auth.createProfileAfterSignup);
+  // Use getOrCreateProfile action to ensure user profile exists (idempotent)
+  const getOrCreateProfile = useAction(api.users.getOrCreateProfile);
 
   // Use Convex query directly instead of server function wrapper
   const userCountResult = useQuery(api.users.getUserCount, {});
@@ -124,13 +124,14 @@ function RegisterPage() {
           }
 
           if (data) {
-            // Ensure a profile exists for the newly created user
+            // Ensure a profile exists for the newly created user (idempotent)
             try {
-              await createProfileAfterSignup({});
+              await getOrCreateProfile({});
             } catch (e) {
-              // Log but don't block sign-in flow
+              // Log but don't block sign-in flow; profile might be created later via useAuth fallback
               // eslint-disable-next-line no-console
-              console.error('Failed to create profile after signup:', e);
+              console.error('Failed to ensure profile after signup:', e);
+              // Could show a non-blocking warning to user if desired
             }
           } else {
             throw new Error('Sign-in returned no data');

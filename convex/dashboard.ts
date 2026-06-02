@@ -56,7 +56,7 @@ export const getDashboardData = query({
         .withIndex('by_userId', (q) => q.eq('userId', currentUserId))
         .first();
 
-      if (currentProfile?.role !== 'admin') {
+      if (currentProfile?.role !== 'platform_admin') {
         return null;
       }
 
@@ -119,7 +119,7 @@ export const getDashboardData = query({
 
       // Convert audit logs to activity items with real user emails
       const activity = recentAuditLogs.map((log) => ({
-        id: log.id,
+        id: log._id.toString(),
         type: (log.action === 'LOGIN'
           ? 'login'
           : log.action === 'SIGNUP'
