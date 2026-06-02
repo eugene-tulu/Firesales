@@ -48,7 +48,10 @@
     "analyze": "pnpm build && npx vite-bundle-analyzer dist/client/assets/*.js",
     "infra:deploy": "tsx infra/storage.ts",
     "infra:preview": "tsx infra/storage.ts --preview",
-    "test": "vitest"
+    "test": "vitest",
+    "deploy": "pnpm run build && wrangler deploy",
+    "preview": "pnpm run build && wrangler dev",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",
@@ -102,6 +105,7 @@
   "devDependencies": {
     "@aws-sdk/client-iam": "^3.927.0",
     "@biomejs/biome": "^2.3.4",
+    "@cloudflare/vite-plugin": "^1.39.1",
     "@tailwindcss/vite": "^4.1.17",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",
@@ -113,6 +117,7 @@
     "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "wrangler": "^4.96.0"
   }
 }
