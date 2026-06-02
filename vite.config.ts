@@ -7,6 +7,8 @@ import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig } from 'vite';
 import tsConfigPaths from 'vite-tsconfig-paths';
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 export default defineConfig((env) => {
   const isDev = env.mode === 'development';
 
@@ -38,6 +40,11 @@ export default defineConfig((env) => {
         open: false,
         gzipSize: true,
       }),
+      cloudflare({
+        viteEnvironment: {
+          name: "ssr"
+        }
+      })
     ],
   };
 });
