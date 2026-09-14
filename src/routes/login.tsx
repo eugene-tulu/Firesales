@@ -1,11 +1,10 @@
-import { api } from '@convex/_generated/api';
 import { useForm } from '@tanstack/react-form';
 import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router';
-import { useAction } from 'convex/react';
-import { Lock, Mail } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { Flame, Lock, Mail, Sparkles } from 'lucide-react';
+import { useId, useState } from 'react';
 import { z } from 'zod';
 import { AuthSkeleton } from '~/components/AuthSkeleton';
+import { FiresalesMark } from '~/components/FiresalesMark';
 import { Button } from '~/components/ui/button';
 import { Field, FieldLabel } from '~/components/ui/field';
 import { InputGroup, InputGroupIcon, InputGroupInput } from '~/components/ui/input-group';
@@ -15,23 +14,16 @@ import { useAuthState } from '~/features/auth/hooks/useAuthState';
 const REDIRECT_TARGETS = [
   '/app',
   '/app/profile',
+  '/app/orders',
   '/app/admin',
   '/app/admin/users',
   '/app/admin/stats',
+  '/app/seller/dashboard',
+  '/dashboard/flash-sales',
+  '/dashboard/flash-sales/create',
 ] as const;
 
 type RedirectTarget = (typeof REDIRECT_TARGETS)[number];
-
-function resolveRedirectTarget(value?: string | null): RedirectTarget {
-  if (!value) {
-    return '/app';
-  }
-
-  const [path] = value.split('?');
-  const match = REDIRECT_TARGETS.find((route) => route === path);
-
-  return (match ?? '/app') as RedirectTarget;
-}
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -42,62 +34,44 @@ export const Route = createFileRoute('/login')({
       .string()
       .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
       .optional(),
-    reset: z.string().optional(),
-    redirect: z
-      .string()
-      .regex(/^\/|https?:\/\/.*$/)
-      .optional(),
+    redirect: z.string().optional(),
   }),
   beforeLoad: ({ context, search }) => {
     if (context.isAuthenticated) {
-      const redirectTarget = resolveRedirectTarget(search.redirect);
-      throw redirect({ to: redirectTarget });
+      throw redirect({ to: resolveRedirectTarget(search.redirect) ?? '/app' });
     }
   },
 });
 
-function LoginPage() {
-  const { email: emailFromQuery, reset, redirect: redirectParam } = Route.useSearch();
-  const redirectTarget = resolveRedirectTarget(redirectParam);
-  const navigate = useNavigate();
-  const { isAuthenticated, isPending } = useAuthState();
+function resolveRedirectTarget(value?: string | null): RedirectTarget | null {
+  if (!value) return null;
 
-  // Use getOrCreateProfile action to ensure user profile exists (idempotent)
-  const getOrCreateProfile = useAction(api.users.getOrCreateProfile);
+  const [path] = value.split('?');
+  return REDIRECT_TARGETS.find((route) => route === path) ?? null;
+}
+
+function LoginPage() {
+  const { email: emailFromQuery, redirect: redirectParam } = Route.useSearch();
+  const redirectTarget = resolveRedirectTarget(redirectParam);
+  const uid = useId();
+  const emailId = `${uid}-email`;
+  const passwordId = `${uid}-password`;
+  const { isPending } = useAuthState();
+  const navigate = useNavigate();
 
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const emailId = useId();
-  const passwordId = useId();
 
   const form = useForm({
-    defaultValues: {
-      email: emailFromQuery || (import.meta.env.DEV ? '' : ''),
-      password: import.meta.env.DEV ? '' : '',
-    },
+    defaultValues: { email: emailFromQuery || '', password: '' },
     onSubmit: async ({ value }) => {
       setError('');
-      setSuccessMessage('');
-
-      // Validate form fields
-      const errors: string[] = [];
-
-      // Validate email
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!value.email) {
-        errors.push('Email is required');
-      } else if (!emailRegex.test(value.email)) {
-        errors.push('Please enter a valid email address');
+      if (!value.email || !emailRegex.test(value.email)) {
+        setError('Please enter a valid email address.');
+        return;
       }
-
-      // Validate password
       if (!value.password) {
-        errors.push('Password is required');
-      }
-
-      // Show validation errors if any
-      if (errors.length > 0) {
-        setError(errors.join('. '));
+        setError('Password is required.');
         return;
       }
 
@@ -112,7 +86,7 @@ function LoginPage() {
           if (signInError.status === 403) {
             setError('Please verify your email address before signing in.');
           } else if (signInError.status === 401) {
-            setError('Invalid email or password. Please check your credentials and try again.');
+            setError('Invalid email or password. Please try again.');
           } else {
             setError(signInError.message || 'Sign-in failed. Please try again.');
           }
@@ -120,197 +94,155 @@ function LoginPage() {
         }
 
         if (data) {
-          // Ensure profile exists (idempotent)
-          try {
-            await getOrCreateProfile({});
-          } catch (err) {
-            console.error('Failed to ensure profile after login:', err);
-            // Non-blocking: continue to redirect
-          }
-
-          navigate({ to: redirectTarget });
+          const target = redirectTarget ?? '/app/seller/dashboard';
+          void navigate({ to: target, replace: true });
         } else {
-          setError('An unexpected error occurred. Please try again.');
+          setError('Login failed. Please try again.');
         }
-      } catch (error: unknown) {
-        const errorObj = error as {
-          message?: string;
-          code?: string;
-          status?: number;
-          error?: { message?: string; code?: string };
-        };
-        const errorMessage = errorObj?.message || errorObj?.error?.message || '';
-        const errorCode = errorObj?.code || errorObj?.error?.code || '';
-
-        if (
-          errorMessage.includes('Invalid email or password') ||
-          errorCode === 'INVALID_EMAIL_OR_PASSWORD' ||
-          errorObj?.status === 401
-        ) {
-          setError('Invalid email or password. Please check your credentials and try again.');
-        } else if (errorMessage.includes('User not found') || errorCode === 'USER_NOT_FOUND') {
-          setError(
-            'No account found with this email address. Please check your email or create an account.',
-          );
-        } else if (
-          errorMessage.includes('Too many attempts') ||
-          errorMessage.includes('rate limit')
-        ) {
-          setError('Too many login attempts. Please wait a few minutes and try again.');
-        } else {
-          setError(`Login failed. Please try again. (Error: ${errorMessage || 'Unknown error'})`);
-        }
+      } catch {
+        setError('Login failed. Please try again.');
       }
     },
   });
 
-  // Get current email value for navigation links
-  const [currentEmail, setCurrentEmail] = useState(emailFromQuery || '');
-
-  useEffect(() => {
-    if (reset === 'success') {
-      setSuccessMessage('Password reset successful! Please sign in with your new password.');
-      form.setFieldValue('password', '');
-    } else {
-      setSuccessMessage('');
-    }
-  }, [reset, form]);
-
-  if (isPending) {
-    return <AuthSkeleton />;
-  }
+  if (isPending) return <AuthSkeleton />;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <div className="flex justify-center">
+    <div className="page-atmosphere -mx-4 -my-6 flex min-h-screen items-center px-4 py-10 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="mx-auto grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-primary/20 bg-card/90 shadow-2xl shadow-primary/10 md:grid-cols-[0.92fr_1.08fr]">
+        <section className="relative hidden overflow-hidden bg-foreground p-10 text-background md:block">
+          <div className="quiet-grid absolute inset-0 opacity-20" />
+          <div className="relative flex h-full flex-col">
             <Link
               to="/"
-              className="focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded"
+              className="w-fit rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              <img
-                src="/android-chrome-192x192.png"
-                alt="TanStack Start Template Logo"
-                className="w-12 h-12 rounded hover:opacity-80 transition-opacity"
-              />
+              <FiresalesMark subtitle="Chef drop studio" />
+            </Link>
+            <div className="my-auto">
+              <p className="text-kicker flex items-center gap-2 text-[0.65rem] font-bold text-primary">
+                <Flame className="size-3.5" /> Back to the kitchen
+              </p>
+              <h1 className="font-editorial mt-4 text-5xl font-bold leading-[0.95] tracking-[-0.055em]">
+                The next invitation starts with a quiet idea.
+              </h1>
+              <p className="mt-6 max-w-sm leading-7 text-background/70">
+                Open your studio, shape the menu, and let Firesales keep the guest list and prep
+                count in sync.
+              </p>
+            </div>
+            <p className="flex items-center gap-2 text-sm text-background/65">
+              <Sparkles className="size-4 text-primary" /> Small batch. Clear promise. Less
+              guessing.
+            </p>
+          </div>
+        </section>
+
+        <section className="px-7 py-9 sm:px-10 sm:py-12">
+          <div className="md:hidden">
+            <Link
+              to="/"
+              className="inline-flex rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <FiresalesMark />
             </Link>
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-foreground">
-            Sign in to your account
+          <p className="text-kicker mt-8 text-xs font-bold text-primary md:mt-0">Chef sign-in</p>
+          <h2 className="font-editorial mt-3 text-4xl font-bold tracking-[-0.045em]">
+            Welcome back.
           </h2>
-        </div>
-        <form
-          className="mt-8 space-y-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            form.handleSubmit();
-          }}
-        >
-          {successMessage && (
-            <div className="bg-primary/10 border border-primary/20 text-primary px-4 py-3 rounded">
-              {successMessage}
-            </div>
-          )}
-          {error && (
-            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
-          <form.Field name="email">
-            {(field) => (
-              <Field>
-                <FieldLabel className="sr-only">Email address</FieldLabel>
-                <InputGroup>
-                  <InputGroupIcon>
-                    <Mail />
-                  </InputGroupIcon>
-                  <InputGroupInput
-                    id={emailId}
-                    name={field.name}
-                    type="email"
-                    required
-                    autoComplete="email"
-                    data-lpignore="true"
-                    placeholder="Email address"
-                    value={field.state.value}
-                    onChange={(e) => {
-                      field.handleChange(e.target.value);
-                      setCurrentEmail(e.target.value);
-                    }}
-                    onBlur={field.handleBlur}
-                  />
-                </InputGroup>
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">{field.state.meta.errors[0]}</p>
-                )}
-              </Field>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Pick up where you left off—or start a fresh little occasion.
+          </p>
+
+          <form
+            className="mt-8 space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit();
+            }}
+          >
+            {error && (
+              <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded">
+                {error}
+              </div>
             )}
-          </form.Field>
-          <form.Field name="password">
-            {(field) => (
-              <Field>
-                <FieldLabel className="sr-only">Password</FieldLabel>
-                <InputGroup>
-                  <InputGroupIcon>
-                    <Lock />
-                  </InputGroupIcon>
-                  <InputGroupInput
-                    id={passwordId}
-                    name={field.name}
-                    type="password"
-                    required
-                    autoComplete="current-password"
-                    data-lpignore="true"
-                    placeholder="Password"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                  />
-                </InputGroup>
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">{field.state.meta.errors[0]}</p>
-                )}
-              </Field>
-            )}
-          </form.Field>
-          <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
-            {([canSubmit, isSubmitting]) => (
-              <Button type="submit" disabled={!canSubmit} className="w-full">
-                {isSubmitting ? 'Signing in...' : 'Sign in'}
-              </Button>
-            )}
-          </form.Subscribe>
-          <div className="text-center space-y-2">
-            <div>
-              <Link
-                to="/forgot-password"
-                search={
-                  currentEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentEmail)
-                    ? { email: currentEmail }
-                    : {}
-                }
-                className="font-medium text-primary hover:text-primary/80"
-              >
-                Forgot your password?
-              </Link>
+            <form.Field name="email">
+              {(field) => (
+                <Field>
+                  <FieldLabel className="sr-only">Email address</FieldLabel>
+                  <InputGroup>
+                    <InputGroupIcon>
+                      <Mail />
+                    </InputGroupIcon>
+                    <InputGroupInput
+                      id={emailId}
+                      name={field.name}
+                      type="email"
+                      required
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  </InputGroup>
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">{field.state.meta.errors[0]}</p>
+                  )}
+                </Field>
+              )}
+            </form.Field>
+            <form.Field name="password">
+              {(field) => (
+                <Field>
+                  <FieldLabel className="sr-only">Password</FieldLabel>
+                  <InputGroup>
+                    <InputGroupIcon>
+                      <Lock />
+                    </InputGroupIcon>
+                    <InputGroupInput
+                      id={passwordId}
+                      name={field.name}
+                      type="password"
+                      required
+                      autoComplete="current-password"
+                      placeholder="Password"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  </InputGroup>
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">{field.state.meta.errors[0]}</p>
+                  )}
+                </Field>
+              )}
+            </form.Field>
+            <Button
+              type="submit"
+              className="h-11 w-full rounded-xl text-base shadow-lg shadow-primary/20"
+            >
+              Open my studio
+            </Button>
+            <div className="space-y-3 pt-1 text-center">
+              <div>
+                <Link
+                  to="/forgot-password"
+                  className="font-medium text-primary hover:text-primary/80"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
+              <div>
+                <Link to="/register" className="font-medium text-primary hover:text-primary/80">
+                  New here? Start your first drop
+                </Link>
+              </div>
             </div>
-            <div>
-              <Link
-                to="/register"
-                search={
-                  currentEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentEmail)
-                    ? { email: currentEmail }
-                    : {}
-                }
-                className="font-medium text-primary hover:text-primary/80"
-              >
-                Don't have an account? Sign up
-              </Link>
-            </div>
-          </div>
-        </form>
+          </form>
+        </section>
       </div>
     </div>
   );

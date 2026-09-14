@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import type { UserRole } from '../../auth/types';
-import { DEFAULT_ROLE, USER_ROLES } from '../../auth/types';
+import { USER_ROLES } from '../../auth/types';
 import { useOptimisticMutation } from '../hooks/useOptimisticUpdates';
 import type { User } from '../types';
 
@@ -29,6 +29,14 @@ interface UserEditDialogProps {
   open: boolean;
   user: User | null;
   onClose: () => void;
+}
+
+type AssignableRole = typeof USER_ROLES.SELLER | typeof USER_ROLES.PLATFORM_ADMIN;
+
+function toAssignableRole(role: UserRole | undefined): AssignableRole {
+  return role === USER_ROLES.PLATFORM_ADMIN
+    ? USER_ROLES.PLATFORM_ADMIN
+    : USER_ROLES.SELLER;
 }
 
 export function UserEditDialog({ open, user, onClose }: UserEditDialogProps) {
@@ -43,7 +51,7 @@ export function UserEditDialog({ open, user, onClose }: UserEditDialogProps) {
     defaultValues: {
       name: user?.name || '',
       email: user?.email || '',
-      role: (user?.role as UserRole) || DEFAULT_ROLE,
+      role: toAssignableRole(user?.role as UserRole | undefined),
     },
     onSubmit: async ({ value }) => {
       if (!user?.id) return;
@@ -110,7 +118,7 @@ export function UserEditDialog({ open, user, onClose }: UserEditDialogProps) {
       form.reset({
         name: user.name || '',
         email: user.email || '',
-        role: (user.role as UserRole) || DEFAULT_ROLE,
+        role: toAssignableRole(user.role as UserRole),
       });
     }
   }, [user, form]);
@@ -200,7 +208,7 @@ export function UserEditDialog({ open, user, onClose }: UserEditDialogProps) {
               validators={{
                 onChange: ({ value }) => {
                   if (!value) return 'Role is required';
-                  if (!Object.values(USER_ROLES).includes(value as UserRole))
+                  if (value !== USER_ROLES.SELLER && value !== USER_ROLES.PLATFORM_ADMIN)
                     return 'Invalid role selected';
                   return undefined;
                 },
@@ -211,15 +219,15 @@ export function UserEditDialog({ open, user, onClose }: UserEditDialogProps) {
                   <FieldLabel>Role</FieldLabel>
                   <Select
                     value={field.state.value}
-                    onValueChange={(value: UserRole) => field.handleChange(value)}
+                    onValueChange={(value: AssignableRole) => field.handleChange(value)}
                     disabled={isSubmitting}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="seller">Chef</SelectItem>
+                      <SelectItem value="platform_admin">Platform admin</SelectItem>
                     </SelectContent>
                   </Select>
                   {field.state.meta.errors.length > 0 && (

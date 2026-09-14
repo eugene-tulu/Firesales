@@ -1,5 +1,5 @@
 import { api } from '@convex/_generated/api';
-import { useQuery } from 'convex/react';
+import { useConvexAuth, useQuery } from 'convex/react';
 import { useOptimisticMutation } from '../../admin/hooks/useOptimisticUpdates';
 
 export interface UpdateProfileData {
@@ -19,7 +19,8 @@ const toProfileData = (profile: ProfileRecord) => ({
 
 // Hook to get user profile using Convex real-time query
 export function useProfile() {
-  const profile = useQuery(api.users.getCurrentUserProfile);
+  const { isAuthenticated } = useConvexAuth();
+  const profile = useQuery(api.users.getCurrentUserProfile, isAuthenticated ? {} : 'skip');
   const hasResolved = profile !== undefined;
   const normalizedProfile = profile ? toProfileData(profile as ProfileRecord) : undefined;
   const isUnauthorized = hasResolved && profile === null;

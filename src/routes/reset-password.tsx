@@ -112,7 +112,7 @@ function ResetPasswordPage() {
   useEffect(() => {
     if (session?.user && success) {
       setTimeout(() => {
-        router.navigate({ to: '/app' });
+        router.navigate({ to: '/app/seller/dashboard' });
       }, 1000);
     }
   }, [session, success, router]);
@@ -123,7 +123,7 @@ function ResetPasswordPage() {
     }
 
     if (authState.isAuthenticated) {
-      throw redirect({ to: '/app' });
+      throw redirect({ to: '/app/seller/dashboard' });
     }
   }
 
@@ -139,7 +139,7 @@ function ResetPasswordPage() {
               >
                 <img
                   src="/android-chrome-192x192.png"
-                  alt="TanStack Start Template Logo"
+                  alt="Firesales"
                   className="w-12 h-12 rounded hover:opacity-80 transition-opacity"
                 />
               </Link>
@@ -184,7 +184,7 @@ function ResetPasswordPage() {
             >
               <img
                 src="/android-chrome-192x192.png"
-                alt="TanStack Start Template Logo"
+                alt="Firesales"
                 className="w-12 h-12 rounded hover:opacity-80 transition-opacity"
               />
             </Link>

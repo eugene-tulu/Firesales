@@ -1,16 +1,18 @@
-import { HeadContent, Scripts, createRootRouteWithContext } from '@tanstack/react-router';
-import * as React from 'react';
-import { createServerFn } from '@tanstack/react-start';
+import { api } from '@convex/_generated/api';
 import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react';
 import type { ConvexQueryClient } from '@convex-dev/react-query';
 import type { QueryClient } from '@tanstack/react-query';
-import appCss from '~/styles/app.css?url';
-import { authClient } from '~/features/auth/auth-client';
+import { createRootRouteWithContext, HeadContent, Scripts } from '@tanstack/react-router';
+import { createServerFn } from '@tanstack/react-start';
+import { useAction, useConvexAuth } from 'convex/react';
+import * as React from 'react';
+import { AppShell } from '~/components/AppShell';
+import { ErrorBoundaryWrapper } from '~/components/ErrorBoundary';
+import { Providers } from '~/components/Providers';
+import { authClient, useSession } from '~/features/auth/auth-client';
 import { getToken } from '~/lib/auth-server';
 import { setupClaimRefresh } from '~/lib/roleRefresh';
-import { AppShell } from '~/components/AppShell';
-import { Providers } from '~/components/Providers';
-import { ErrorBoundaryWrapper } from '~/components/ErrorBoundary';
+import appCss from '~/styles/app.css?url';
 
 const fetchAuthToken = createServerFn({ method: 'GET' }).handler(async () => {
   return await getToken();
@@ -61,6 +63,7 @@ function RootComponent() {
           authClient={authClient as any}
           initialToken={token}
         >
+          <ProfileBootstrapper />
           <Providers>
             <AppShell />
           </Providers>
@@ -68,6 +71,27 @@ function RootComponent() {
       </RootDocument>
     </ErrorBoundaryWrapper>
   );
+}
+
+function ProfileBootstrapper() {
+  const { data: session } = useSession();
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const getOrCreateProfile = useAction(api.users.getOrCreateProfile);
+  const bootstrappedUserId = React.useRef<string | null>(null);
+  const userId = session?.user?.id ?? null;
+
+  React.useEffect(() => {
+    if (isLoading || !isAuthenticated || !userId || bootstrappedUserId.current === userId) {
+      return;
+    }
+
+    bootstrappedUserId.current = userId;
+    void getOrCreateProfile({}).catch((error) => {
+      console.error('Unable to prepare the signed-in user profile:', error);
+    });
+  }, [getOrCreateProfile, isAuthenticated, isLoading, userId]);
+
+  return null;
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {

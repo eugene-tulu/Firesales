@@ -1,65 +1,34 @@
 import { createClient } from '@convex-dev/better-auth';
 import { convex } from '@convex-dev/better-auth/plugins';
-import { dodopayments, portal } from '@dodopayments/better-auth';
 import { betterAuth } from 'better-auth';
-import { v, ConvexError } from 'convex/values';
-import { DodoPayments } from 'dodopayments';
+import { ConvexError, v } from 'convex/values';
 import { getBetterAuthSecret, getSiteUrl } from '../src/lib/server/env.server';
 import type { UserId } from '../src/lib/shared/user-id';
 import { api, components, internal } from './_generated/api';
 import type { DataModel } from './_generated/dataModel';
-import { action, internalAction, mutation, query } from './_generated/server';
+import { action, internalAction, query } from './_generated/server';
 import authConfig from './auth.config';
+
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS ?? '')
+    .split(/[,\s]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+const isAdminEmail = (email: string | null | undefined) =>
+  email != null && ADMIN_EMAILS.has(email.trim().toLowerCase());
 
 const siteUrl = getSiteUrl();
 const secret = getBetterAuthSecret(); // Required — throws if not set
 
-// Initialize Dodo Payments client (optional for development)
-const dodoApiKey = process.env.DODO_PAYMENTS_API_KEY;
-const dodoEnvironment =
-  (process.env.DODO_PAYMENTS_ENVIRONMENT as 'test_mode' | 'live_mode') || 'test_mode';
-
-// Create a Dodo Payments client (real or mock)
-export const dodoPayments: any = dodoApiKey
-  ? new DodoPayments({
-      bearerToken: dodoApiKey,
-      environment: dodoEnvironment,
-    })
-  : {
-      checkoutSessions: {
-        create: async (params: any) => {
-          console.warn('Mock Dodo: checkoutSessions.create called with', params);
-          return {
-            checkout_url: 'https://example.com/checkout/mock',
-            session_id: 'mock-session-id',
-          };
-        },
-      },
-      portal: () => ({}),
-    };
-
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export const createAuth = (ctx: any, { optionsOnly } = { optionsOnly: false }) => {
-  console.log('[createAuth] siteUrl:', siteUrl);
   const plugins = [
     convex({
       authConfig,
     }),
-    ...(dodoApiKey
-      ? [
-          dodopayments({
-            client: dodoPayments,
-            createCustomerOnSignUp: true,
-            use: [
-              // Checkout plugin disabled - using custom checkout sessions for flash sales
-              // Portal plugin available for customer self-service
-              portal(),
-              // Webhook plugin will be configured separately in Convex HTTP handler
-            ],
-          }),
-        ]
-      : []),
     // Note: tanstackStartCookies() is not used in Convex functions.
     // Cookie handling for TanStack Start is done via convexBetterAuthReactStart in src/lib/auth-server.ts
   ];
@@ -316,11 +285,19 @@ export const createProfileAfterSignup = action({
     }
 
     const userCountResult = await ctx.runQuery(api.users.getUserCount, {});
-    const isFirstUser = userCountResult.isFirstUser;
+    let role: 'seller' | 'platform_admin' = 'seller';
+    if (userCountResult.isFirstUser) {
+      role = 'platform_admin';
+    } else {
+      const identityAny = identity as { email?: string };
+      if (isAdminEmail(identityAny.email)) {
+        role = 'platform_admin';
+      }
+    }
 
-    await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
+    await ctx.runMutation(internal.userProfiles.createUserProfileIfNotExists, {
       userId,
-      role: isFirstUser ? 'platform_admin' : 'seller',
+      role,
     });
 
     return { success: true, message: 'Profile created successfully' };

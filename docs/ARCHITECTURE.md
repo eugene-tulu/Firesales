@@ -18,7 +18,7 @@ This document records critical architectural decisions and fixes made during dev
 
 | File | Purpose |
 |------|---------|
-| `src/lib/auth-server.ts` | Server-side auth utilities — exports `getToken`, `handler`, `fetchAuthQuery` etc. |
+| `src/lib/auth-server.ts` | Server-side auth utilities — exports `getToken` and the shared Better Auth handler. |
 | `src/routes/api/auth/$.ts` | Proxies all Better Auth HTTP requests through TanStack Start so cookies are set correctly |
 | `convex/auth.ts` | Better Auth config for Convex — uses `createClient(components.betterAuth)` |
 | `convex/http.ts` | Registers Better Auth routes via `authComponent.registerRoutes(http, createAuth)` |

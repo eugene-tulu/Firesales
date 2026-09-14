@@ -14,6 +14,8 @@ export const Route = createFileRoute('/app')({
   errorComponent: DashboardErrorBoundary,
   notFoundComponent: () => <NotFound />,
   beforeLoad: ({ context }) => {
+    // A new Better Auth session can reach the client before the server-side
+    // token refresh. Let the reactive provider complete that hand-off.
     if (typeof window !== 'undefined') return;
     if (!context.isAuthenticated) {
       throw redirect({ to: '/login' });

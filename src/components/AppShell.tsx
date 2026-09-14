@@ -22,13 +22,18 @@ export function AppShell() {
   const isAuthRoute = ['/login', '/register', '/forgot-password', '/reset-password'].includes(
     location.pathname,
   );
+  const isPublicDrop = location.pathname.startsWith('/live/');
 
   return (
     <>
       <div className="min-h-screen bg-background">
-        {!isAuthRoute && <AppNavigation />}
+        {!isAuthRoute && !isPublicDrop && <AppNavigation />}
         <main
-          className={`max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 ${isAuthRoute ? 'pt-12' : ''}`}
+          className={
+            isPublicDrop
+              ? ''
+              : `mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 ${isAuthRoute ? 'pt-12' : ''}`
+          }
         >
           <Outlet />
         </main>

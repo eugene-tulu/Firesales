@@ -1,7 +1,7 @@
 import { httpRouter } from 'convex/server';
 import { authComponent, createAuth } from './auth';
 import { healthCheck } from './health';
-import { handleDodoWebhook } from './payments';
+import { handlePaystackWebhook } from './payments';
 
 const http = httpRouter();
 
@@ -14,11 +14,12 @@ http.route({
   handler: healthCheck,
 });
 
-// Dodo Payments webhook endpoint
+// Paystack webhook endpoint. Configure this exact HTTPS URL in Paystack's
+// Settings → API Keys & Webhooks screen.
 http.route({
-  path: '/webhooks/dodo-payments',
+  path: '/webhooks/paystack',
   method: 'POST',
-  handler: handleDodoWebhook,
+  handler: handlePaystackWebhook,
 });
 
 export default http;

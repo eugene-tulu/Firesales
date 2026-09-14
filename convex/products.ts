@@ -5,6 +5,7 @@ export const create = mutation({
   args: {
     name: v.string(),
     price: v.number(),
+    currency: v.optional(v.string()),
     description: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     sourceUrl: v.optional(v.string()),
@@ -12,12 +13,21 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error('Not authenticated');
+    if (!Number.isSafeInteger(args.price) || args.price < 1) {
+      throw new Error('Price must be a positive whole number of cents.');
+    }
+
+    const currency = (args.currency || process.env.PAYSTACK_CURRENCY || 'KES').trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw new Error('Currency must be a three-letter ISO currency code.');
+    }
 
     const productId = await ctx.db.insert('products', {
       userId: identity.subject,
       sellerId: identity.subject,
       name: args.name,
       price: args.price,
+      currency,
       description: args.description || '',
       imageUrl: args.imageUrl || '',
       url: args.sourceUrl || '',

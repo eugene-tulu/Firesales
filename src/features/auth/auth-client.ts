@@ -1,5 +1,4 @@
 import { convexClient } from '@convex-dev/better-auth/client/plugins';
-import { dodopaymentsClient } from '@dodopayments/better-auth';
 import { createAuthClient } from 'better-auth/react';
 
 // Function to get the correct site URL for client-side usage
@@ -37,9 +36,9 @@ function getClientSiteUrl(): string {
 
 // Extend the auth client with forgotPassword and resetPassword methods
 export const authClient = createAuthClient({
-  plugins: [convexClient(), dodopaymentsClient()],
+  plugins: [convexClient()],
   baseURL: getClientSiteUrl(),
-}) as ReturnType<typeof createAuthClient> & {
+}) as unknown as ReturnType<typeof createAuthClient> & {
   forgotPassword: (params: {
     email: string;
     redirectTo: string;

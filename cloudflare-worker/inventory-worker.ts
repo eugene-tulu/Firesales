@@ -1,22 +1,30 @@
-// Cloudflare Worker with Durable Objects for atomic inventory operations
+// Cloudflare Durable Object for the hot path of a chef drop. Each object is
+// keyed by a drop ID, never by a reusable menu item, so concurrent drops do
+// not share capacity.
 
-// Define the structure of our inventory data
+interface Reservation {
+  quantity: number;
+  sessionId: string;
+  expiresAt: number;
+}
+
 interface InventoryState {
-  productId: string;
+  saleId: string;
   totalUnits: number;
   availableUnits: number;
   reservedUnits: number;
   soldUnits: number;
-  reservations: { [key: string]: { quantity: number; sessionId: string; expiresAt: number } };
+  reservations: Record<string, Reservation>;
+  confirmedReservationIds: Record<string, true>;
 }
 
-// Define the types for Cloudflare Workers
 interface Env {
   INVENTORY_DO: DurableObjectNamespace;
   CLOUDFLARE_WORKER_TOKEN: string;
 }
 
-// Durable Object class for inventory management
+const HOLD_DURATION_MS = 15 * 60 * 1000;
+
 export class InventoryDO {
   state: DurableObjectState;
   env: Env;
@@ -26,258 +34,272 @@ export class InventoryDO {
     this.state = state;
     this.env = env;
     this.inventoryState = {
-      productId: '',
+      saleId: '',
       totalUnits: 0,
       availableUnits: 0,
       reservedUnits: 0,
       soldUnits: 0,
       reservations: {},
+      confirmedReservationIds: {},
     };
-    // Restore state if it exists
+
     this.state.blockConcurrencyWhile(async () => {
       const storedState = await this.state.storage.get<InventoryState>('inventory');
       if (storedState) {
-        this.inventoryState = storedState;
+        this.inventoryState = {
+          ...storedState,
+          confirmedReservationIds: storedState.confirmedReservationIds ?? {},
+        };
       }
     });
   }
 
-  // Handle GET requests to check inventory
-  async getInventory(productId: string): Promise<InventoryState> {
-    // If the product ID doesn't match what we have stored, this is an error
-    if (this.inventoryState.productId !== productId) {
-      throw new Error(`Inventory not initialized for product ${productId}`);
-    }
-    return { ...this.inventoryState };
+  private async persist() {
+    await this.state.storage.put('inventory', this.inventoryState);
   }
 
-  // Handle POST requests to reserve inventory
-  async reserveInventory(
-    productId: string,
-    quantity: number,
-    sessionId: string,
-  ): Promise<{ success: boolean; error?: string; reservationId?: string }> {
-    // Initialize inventory if this is the first operation for this product
-    if (this.inventoryState.productId === '' || this.inventoryState.productId !== productId) {
+  private async cleanupExpiredReservations() {
+    const now = Date.now();
+    let changed = false;
+
+    for (const [reservationId, reservation] of Object.entries(this.inventoryState.reservations)) {
+      if (reservation.expiresAt >= now) continue;
+      this.inventoryState.reservedUnits -= reservation.quantity;
+      this.inventoryState.availableUnits += reservation.quantity;
+      delete this.inventoryState.reservations[reservationId];
+      changed = true;
+    }
+
+    if (changed) await this.persist();
+  }
+
+  private async ensureInitialized(saleId: string, totalUnits: number) {
+    if (!Number.isInteger(totalUnits) || totalUnits < 1) {
+      throw new Error('A drop must have a positive whole-number capacity.');
+    }
+
+    if (!this.inventoryState.saleId) {
       this.inventoryState = {
-        productId,
-        totalUnits: 0, // This would be set when inventory is initialized
-        availableUnits: 0,
+        saleId,
+        totalUnits,
+        availableUnits: totalUnits,
         reservedUnits: 0,
         soldUnits: 0,
         reservations: {},
+        confirmedReservationIds: {},
       };
+      await this.persist();
+      return;
     }
 
-    // Check if there's enough available inventory
+    if (this.inventoryState.saleId !== saleId) {
+      throw new Error('Inventory object does not belong to this drop.');
+    }
+    if (this.inventoryState.totalUnits !== totalUnits) {
+      throw new Error('Drop capacity cannot change after reservations begin.');
+    }
+  }
+
+  private assertSale(saleId: string) {
+    if (this.inventoryState.saleId !== saleId) {
+      throw new Error(`Inventory is not initialized for drop ${saleId}.`);
+    }
+  }
+
+  async getInventory(saleId: string) {
+    this.assertSale(saleId);
+    await this.cleanupExpiredReservations();
+    return { ...this.inventoryState };
+  }
+
+  async initializeInventory(saleId: string, totalUnits: number) {
+    await this.ensureInitialized(saleId, totalUnits);
+    return { success: true, ...this.inventoryState };
+  }
+
+  async reserveInventory(
+    saleId: string,
+    totalUnits: number,
+    quantity: number,
+    sessionId: string,
+  ): Promise<{ success: boolean; error?: string; reservationId?: string }> {
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      return { success: false, error: 'Choose at least one plate.' };
+    }
+
+    await this.ensureInitialized(saleId, totalUnits);
+    await this.cleanupExpiredReservations();
+
     if (this.inventoryState.availableUnits < quantity) {
-      return { success: false, error: 'Insufficient inventory' };
+      return { success: false, error: 'This drop no longer has enough plates available.' };
     }
 
-    // Create a unique reservation ID
-    const reservationId = `reservation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Update inventory atomically
+    const reservationId = crypto.randomUUID();
     this.inventoryState.availableUnits -= quantity;
     this.inventoryState.reservedUnits += quantity;
-
-    // Add reservation to our object
     this.inventoryState.reservations[reservationId] = {
       quantity,
       sessionId,
-      expiresAt: Date.now() + 15 * 60 * 1000, // 15 minutes from now
+      expiresAt: Date.now() + HOLD_DURATION_MS,
     };
-
-    // Persist the state
-    await this.state.storage.put('inventory', this.inventoryState);
+    await this.persist();
 
     return { success: true, reservationId };
   }
 
-  // Handle POST requests to confirm a reservation
   async confirmReservation(
+    saleId: string,
     reservationId: string,
     sessionId: string,
   ): Promise<{ success: boolean; error?: string }> {
-    // Check if the reservation exists
+    this.assertSale(saleId);
+    await this.cleanupExpiredReservations();
+
+    // Payment providers retry completed webhooks. A confirmed hold is deliberately
+    // idempotent so a retry cannot turn a paid guest into a failed order.
+    if (this.inventoryState.confirmedReservationIds[reservationId]) {
+      return { success: true };
+    }
+
     const reservation = this.inventoryState.reservations[reservationId];
-    if (!reservation) {
-      return { success: false, error: 'Reservation not found' };
-    }
-
-    // Check if the session ID matches
+    if (!reservation) return { success: false, error: 'Reservation not found or expired.' };
     if (reservation.sessionId !== sessionId) {
-      return { success: false, error: 'Session ID does not match reservation' };
+      return { success: false, error: 'Session does not match this reservation.' };
     }
 
-    // Check if the reservation has expired
-    if (reservation.expiresAt < Date.now()) {
-      return { success: false, error: 'Reservation has expired' };
-    }
-
-    // Update inventory: move from reserved to sold
     this.inventoryState.reservedUnits -= reservation.quantity;
     this.inventoryState.soldUnits += reservation.quantity;
-
-    // Remove the reservation
     delete this.inventoryState.reservations[reservationId];
-
-    // Persist the state
-    await this.state.storage.put('inventory', this.inventoryState);
+    this.inventoryState.confirmedReservationIds[reservationId] = true;
+    await this.persist();
 
     return { success: true };
   }
 
-  // Handle POST requests to release a reservation
   async releaseReservation(
+    saleId: string,
     reservationId: string,
     sessionId: string,
   ): Promise<{ success: boolean; error?: string }> {
-    // Check if the reservation exists
+    this.assertSale(saleId);
+    await this.cleanupExpiredReservations();
+
+    if (this.inventoryState.confirmedReservationIds[reservationId]) {
+      return { success: false, error: 'A paid reservation cannot be released.' };
+    }
+
     const reservation = this.inventoryState.reservations[reservationId];
-    if (!reservation) {
-      return { success: false, error: 'Reservation not found' };
-    }
-
-    // Check if the session ID matches
+    if (!reservation) return { success: false, error: 'Reservation not found or expired.' };
     if (reservation.sessionId !== sessionId) {
-      return { success: false, error: 'Session ID does not match reservation' };
+      return { success: false, error: 'Session does not match this reservation.' };
     }
 
-    // Check if the reservation has expired
-    if (reservation.expiresAt < Date.now()) {
-      return { success: false, error: 'Reservation has expired' };
-    }
-
-    // Update inventory: return from reserved to available
     this.inventoryState.reservedUnits -= reservation.quantity;
     this.inventoryState.availableUnits += reservation.quantity;
-
-    // Remove the reservation
     delete this.inventoryState.reservations[reservationId];
-
-    // Persist the state
-    await this.state.storage.put('inventory', this.inventoryState);
+    await this.persist();
 
     return { success: true };
-  }
-
-  // Cleanup expired reservations
-  async cleanupExpiredReservations(): Promise<void> {
-    const now = Date.now();
-    const expiredReservationIds: string[] = [];
-
-    // Find all expired reservations
-    for (const reservationId in this.inventoryState.reservations) {
-      const reservation = this.inventoryState.reservations[reservationId];
-      if (reservation.expiresAt < now) {
-        expiredReservationIds.push(reservationId);
-      }
-    }
-
-    // Release expired reservations
-    for (const reservationId of expiredReservationIds) {
-      const reservation = this.inventoryState.reservations[reservationId];
-      if (reservation) {
-        this.inventoryState.reservedUnits -= reservation.quantity;
-        this.inventoryState.availableUnits += reservation.quantity;
-        delete this.inventoryState.reservations[reservationId];
-      }
-    }
-
-    // Persist the state if we made changes
-    if (expiredReservationIds.length > 0) {
-      await this.state.storage.put('inventory', this.inventoryState);
-    }
   }
 
   async fetch(request: Request): Promise<Response> {
     try {
-      const url = new URL(request.url);
-      const path = url.pathname;
-      const method = request.method;
-
-      // Check for authentication
       const authHeader = request.headers.get('Authorization');
       if (
         !authHeader ||
         !authHeader.startsWith('Bearer ') ||
-        authHeader.substring(7) !== this.env.CLOUDFLARE_WORKER_TOKEN
+        authHeader.slice(7) !== this.env.CLOUDFLARE_WORKER_TOKEN
       ) {
-        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return Response.json({ success: false, error: 'Unauthorized' }, { status: 401 });
       }
 
-      if (method === 'GET' && path.startsWith('/inventory/')) {
-        const productId = path.split('/')[2];
-        const inventory = await this.getInventory(productId);
-        return new Response(JSON.stringify(inventory), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } else if (method === 'POST' && path === '/inventory/reserve') {
-        const { productId, quantity, sessionId } = await request.json();
-        const result = await this.reserveInventory(productId, quantity, sessionId);
-        return new Response(JSON.stringify(result), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } else if (method === 'POST' && path === '/inventory/confirm') {
-        const { reservationId, sessionId } = await request.json();
-        const result = await this.confirmReservation(reservationId, sessionId);
-        return new Response(JSON.stringify(result), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } else if (method === 'POST' && path === '/inventory/release') {
-        const { reservationId, sessionId } = await request.json();
-        const result = await this.releaseReservation(reservationId, sessionId);
-        return new Response(JSON.stringify(result), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } else {
-        return new Response(JSON.stringify({ success: false, error: 'Not found' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' },
-        });
+      const url = new URL(request.url);
+      const path = url.pathname;
+
+      if (request.method === 'GET' && path.startsWith('/inventory/')) {
+        const saleId = path.split('/')[2];
+        return Response.json(await this.getInventory(saleId));
       }
-    } catch (err) {
-      console.error('Error in InventoryDO:', err);
-      return new Response(JSON.stringify({ success: false, error: (err as Error).message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+
+      if (request.method !== 'POST') {
+        return Response.json({ success: false, error: 'Not found' }, { status: 404 });
+      }
+
+      const body = (await request.json()) as Record<string, unknown>;
+      const saleId = typeof body.saleId === 'string' ? body.saleId : '';
+      if (!saleId)
+        return Response.json({ success: false, error: 'Missing drop ID.' }, { status: 400 });
+
+      if (path === '/inventory/initialize') {
+        return Response.json(await this.initializeInventory(saleId, Number(body.totalUnits)));
+      }
+      if (path === '/inventory/reserve') {
+        return Response.json(
+          await this.reserveInventory(
+            saleId,
+            Number(body.totalUnits),
+            Number(body.quantity),
+            String(body.sessionId ?? ''),
+          ),
+        );
+      }
+      if (path === '/inventory/confirm') {
+        return Response.json(
+          await this.confirmReservation(
+            saleId,
+            String(body.reservationId ?? ''),
+            String(body.sessionId ?? ''),
+          ),
+        );
+      }
+      if (path === '/inventory/release') {
+        return Response.json(
+          await this.releaseReservation(
+            saleId,
+            String(body.reservationId ?? ''),
+            String(body.sessionId ?? ''),
+          ),
+        );
+      }
+
+      return Response.json({ success: false, error: 'Not found' }, { status: 404 });
+    } catch (error) {
+      console.error('Inventory Durable Object error:', error);
+      return Response.json(
+        { success: false, error: error instanceof Error ? error.message : 'Inventory error' },
+        { status: 500 },
+      );
     }
   }
 }
 
-// Export the Durable Object
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     try {
-      // For requests that need to create/get a Durable Object
-      if (request.url.includes('/inventory/')) {
-        const url = new URL(request.url);
-        let productId = url.pathname.split('/')[2];
-
-        // For POST requests to /inventory/reserve, extract productId from request body
-        if (request.method === 'POST' && url.pathname === '/inventory/reserve') {
-          const body = await request.json();
-          productId = body.productId;
-        }
-
-        // Create a unique ID for the Durable Object based on the product ID
-        const id = env.INVENTORY_DO.idFromName(productId);
-        const stub = env.INVENTORY_DO.get(id);
-        return stub.fetch(request);
+      const url = new URL(request.url);
+      if (!url.pathname.startsWith('/inventory/')) {
+        return new Response('Not Found', { status: 404 });
       }
 
-      return new Response('Not Found', { status: 404 });
-    } catch (err) {
-      console.error('Error in main fetch:', err);
-      return new Response(JSON.stringify({ error: (err as Error).message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      let saleId = url.pathname.split('/')[2];
+      if (request.method === 'POST') {
+        // Read the clone only: the original request body is forwarded intact to
+        // the Durable Object below.
+        const body = (await request.clone().json()) as Record<string, unknown>;
+        saleId = typeof body.saleId === 'string' ? body.saleId : '';
+      }
+
+      if (!saleId)
+        return Response.json({ success: false, error: 'Missing drop ID.' }, { status: 400 });
+
+      const id = env.INVENTORY_DO.idFromName(saleId);
+      return env.INVENTORY_DO.get(id).fetch(request);
+    } catch (error) {
+      console.error('Inventory worker error:', error);
+      return Response.json(
+        { success: false, error: error instanceof Error ? error.message : 'Inventory error' },
+        { status: 500 },
+      );
     }
   },
 };

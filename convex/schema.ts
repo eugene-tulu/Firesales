@@ -10,9 +10,16 @@ export default defineSchema({
   // User profiles table - stores app-specific user data that references Better Auth user IDs
   userProfiles: defineTable({
     userId: v.string(),
-    role: v.union(v.literal('seller'), v.literal('platform_admin'), v.literal('user'), v.literal('admin')),
-    dodoConnected: v.optional(v.boolean()),
+    role: v.union(
+      v.literal('seller'),
+      v.literal('platform_admin'),
+      v.literal('user'),
+      v.literal('admin'),
+    ),
     freeScrapesUsed: v.optional(v.number()),
+    // Created and verified in Paystack before it is used for a chef's split.
+    // The platform remains the merchant account; this is never a secret key.
+    paystackSubaccountCode: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -49,60 +56,24 @@ export default defineSchema({
     .index('by_identifier_kind', ['identifier', 'kind'])
     .index('by_createdAt', ['createdAt']),
 
-  aiMessageUsage: defineTable({
-    userId: v.string(),
-    messagesUsed: v.number(),
-    pendingMessages: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    lastReservedAt: v.optional(v.number()),
-    lastCompletedAt: v.optional(v.number()),
-  }).index('by_userId', ['userId']),
-
-  aiResponses: defineTable({
-    userId: v.string(),
-    requestKey: v.string(),
-    method: v.union(v.literal('direct'), v.literal('gateway'), v.literal('structured')),
-    provider: v.optional(v.string()),
-    model: v.optional(v.string()),
-    response: v.string(),
-    rawText: v.optional(v.string()),
-    structuredData: v.optional(
-      v.object({
-        title: v.string(),
-        summary: v.string(),
-        keyPoints: v.array(v.string()),
-        category: v.string(),
-        difficulty: v.string(),
-      }),
-    ),
-    parseError: v.optional(v.string()),
-    usage: v.optional(
-      v.object({
-        totalTokens: v.optional(v.number()),
-        inputTokens: v.optional(v.number()),
-        outputTokens: v.optional(v.number()),
-      }),
-    ),
-    finishReason: v.optional(v.string()),
-    status: v.union(v.literal('pending'), v.literal('complete'), v.literal('error')),
-    errorMessage: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_userId_createdAt', ['userId', 'createdAt'])
-    .index('by_requestKey', ['requestKey']),
-
-  // FireSales tables
+  // Chef-drop tables. "products" remains the persisted name for backwards
+  // compatibility; in the product experience these are menu items.
   products: defineTable({
     sellerId: v.optional(v.string()),
     userId: v.string(),
     name: v.string(),
     description: v.string(),
     price: v.number(),
+    currency: v.optional(v.string()),
     imageUrl: v.string(),
     url: v.string(),
-    status: v.union(v.literal('draft'), v.literal('active'), v.literal('paused'), v.literal('sold_out'), v.literal('ended')),
+    status: v.union(
+      v.literal('draft'),
+      v.literal('active'),
+      v.literal('paused'),
+      v.literal('sold_out'),
+      v.literal('ended'),
+    ),
     scrapeCreditsUsed: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -129,11 +100,18 @@ export default defineSchema({
     productId: v.id('products'),
     allocatedInventory: v.number(),
     saleUrl: v.string(),
-    status: v.union(v.literal('draft'), v.literal('pending_payment_setup'), v.literal('live'), v.literal('completed')),
+    status: v.union(v.literal('draft'), v.literal('live'), v.literal('completed')),
     userId: v.string(),
+    dropTitle: v.optional(v.string()),
+    chefNote: v.optional(v.string()),
+    pickupDetails: v.optional(v.string()),
+    waitlistOpen: v.optional(v.boolean()),
     totalSales: v.number(),
     totalRevenue: v.number(),
+    // A realtime projection. It decreases when a plate is held, then stays
+    // unchanged when that hold becomes a paid order.
     remainingInventory: v.number(),
+    reservedInventory: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
     startedAt: v.optional(v.number()),
@@ -147,8 +125,20 @@ export default defineSchema({
 
   reservations: defineTable({
     productId: v.id('products'),
+    flashSaleId: v.optional(v.id('flashSales')),
     userId: v.optional(v.string()), // Buyer ID (optional for anonymous reservations)
     sessionId: v.string(), // Session identifier for anonymous users
+    // Durable Object reservation ID. This is intentionally separate from the
+    // Convex document ID so Cloudflare owns the hot counter state.
+    cloudflareReservationId: v.optional(v.string()),
+    // Payment-provider neutral checkout state. A reservation is the source of
+    // truth that links an external payment to a held batch of plates.
+    paymentProvider: v.optional(v.string()),
+    paymentReference: v.optional(v.string()),
+    paymentCheckoutUrl: v.optional(v.string()),
+    guestEmail: v.optional(v.string()),
+    guestName: v.optional(v.string()),
+    dietaryNotes: v.optional(v.string()),
     quantity: v.number(), // Quantity being reserved
     status: v.union(
       v.literal('reserved'),
@@ -161,15 +151,25 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_productId', ['productId'])
+    .index('by_flashSaleId', ['flashSaleId'])
     .index('by_sessionId', ['sessionId'])
     .index('by_status', ['status'])
     .index('by_expiresAt', ['expiresAt']),
 
   orders: defineTable({
     productId: v.id('products'),
+    flashSaleId: v.optional(v.id('flashSales')),
+    reservationId: v.optional(v.id('reservations')),
     userId: v.optional(v.string()), // Buyer ID (optional for anonymous purchases)
     sessionId: v.string(), // Session identifier for anonymous users
-    dodoPaymentId: v.optional(v.string()), // Dodo Payments cart/checkout ID
+    paymentProvider: v.optional(v.string()),
+    paymentReference: v.optional(v.string()),
+    // Store provider transaction IDs as text: some providers exceed safe JS
+    // integer precision for their numeric IDs.
+    paymentTransactionId: v.optional(v.string()),
+    guestEmail: v.optional(v.string()),
+    guestName: v.optional(v.string()),
+    dietaryNotes: v.optional(v.string()),
     status: v.union(
       v.literal('pending'),
       v.literal('paid'),
@@ -183,8 +183,10 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_productId', ['productId'])
+    .index('by_flashSaleId', ['flashSaleId'])
+    .index('by_reservationId', ['reservationId'])
     .index('by_sessionId', ['sessionId'])
-    .index('by_dodoPaymentId', ['dodoPaymentId'])
+    .index('by_paymentProvider_reference', ['paymentProvider', 'paymentReference'])
     .index('by_status', ['status'])
     .index('by_createdAt', ['createdAt']),
 
@@ -200,10 +202,19 @@ export default defineSchema({
     createdAt: v.number(),
   }).index('by_key', ['key']),
 
-  // Payment saga log for cross-system consistency and idempotency
+  waitlist: defineTable({
+    flashSaleId: v.id('flashSales'),
+    email: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index('by_flashSaleId', ['flashSaleId'])
+    .index('by_flashSaleId_email', ['flashSaleId', 'email']),
+
+  // Payment saga log for cross-system consistency and webhook idempotency.
   paymentSagaLog: defineTable({
-    paymentId: v.string(), // External payment ID (e.g., Dodo payment ID)
-    event: v.string(), // 'checkout.completed', 'checkout.failed', etc.
+    paymentId: v.string(), // External payment/event ID
+    event: v.string(),
     payload: v.any(), // Raw event payload
     outcome: v.object({
       success: v.boolean(),

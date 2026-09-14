@@ -7,10 +7,38 @@
  * Run: pnpm run setup:convex
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+
+function getConvexEnvironmentVariable(name: string): string | null {
+  const result = spawnSync('npx', ['convex', 'env', 'get', name], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  if (result.error || result.status !== 0) {
+    throw new Error(`Could not inspect ${name} in Convex. Refusing to change it.`);
+  }
+
+  const value = result.stdout.trim();
+  if (value) return value;
+
+  if (result.stderr.includes(`Environment variable "${name}" not found.`)) {
+    return null;
+  }
+
+  throw new Error(`Convex did not return a usable value for ${name}. Refusing to change it.`);
+}
+
+function setConvexEnvironmentVariable(name: string, value: string) {
+  execFileSync('npx', ['convex', 'env', 'set', name, value], {
+    cwd: process.cwd(),
+    stdio: 'pipe',
+  });
+}
 
 async function main() {
   console.log('🔧 Setting up Convex URLs...\n');
@@ -196,9 +224,31 @@ async function main() {
     console.log('────────────────────────────────────────────────');
   }
 
+  try {
+    const deployedAuthSecret = getConvexEnvironmentVariable('BETTER_AUTH_SECRET');
+
+    if (deployedAuthSecret === null) {
+      console.log('   Setting BETTER_AUTH_SECRET for the first time...');
+      setConvexEnvironmentVariable('BETTER_AUTH_SECRET', betterAuthSecret);
+    } else if (deployedAuthSecret !== betterAuthSecret) {
+      console.error(
+        '\n❌ BETTER_AUTH_SECRET differs between .env.local and this Convex deployment.',
+      );
+      console.error('   It was not changed: it encrypts the Better Auth JWT signing key.');
+      console.error(
+        '   Restore the original secret or intentionally reset the JWKS before rotating it.',
+      );
+      process.exit(1);
+    } else {
+      console.log('   BETTER_AUTH_SECRET already matches Convex; leaving it unchanged.');
+    }
+  } catch (error) {
+    console.error('\n❌ Could not safely verify BETTER_AUTH_SECRET:', error);
+    process.exit(1);
+  }
+
   const envVarDefaults: Record<string, string> = {
-    BETTER_AUTH_SECRET: betterAuthSecret,
-    APP_NAME: 'TanStack Start Template',
+    APP_NAME: 'Firesales',
     RESEND_EMAIL_SENDER: 'onboarding@resend.dev',
   };
 
@@ -210,12 +260,9 @@ async function main() {
   for (const { name, value } of envVars) {
     try {
       console.log(`   Setting ${name}...`);
-      execSync(`npx convex env set ${name} "${value.replace(/"/g, '\\"')}"`, {
-        stdio: 'pipe',
-        cwd: process.cwd(),
-      });
+      setConvexEnvironmentVariable(name, value);
     } catch (_error) {
-      console.log(`   ⚠️  Failed to set ${name} (may already be set)`);
+      console.log(`   ⚠️  Failed to set ${name}`);
     }
   }
 

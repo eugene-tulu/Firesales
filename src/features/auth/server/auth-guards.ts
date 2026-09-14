@@ -1,21 +1,16 @@
 import { api } from '@convex/_generated/api';
-import { redirect } from '@tanstack/react-router';
 import { ConvexHttpClient } from 'convex/browser';
+import { getToken } from '~/lib/auth-server';
 import type { UserId } from '~/lib/shared/user-id';
 import { normalizeUserId } from '~/lib/shared/user-id';
 import type { UserRole } from '../types';
 import { USER_ROLES } from '../types';
-import { getToken } from '~/lib/auth-server';
 
 export interface AuthenticatedUser {
   id: UserId;
   email: string;
   role: UserRole;
   name?: string;
-}
-
-export interface AuthResult {
-  user: AuthenticatedUser;
 }
 
 /**
@@ -70,10 +65,10 @@ async function getCurrentUserServer(): Promise<AuthenticatedUser | null> {
 async function getCurrentUserClient(): Promise<AuthenticatedUser | null> {
   try {
     const { authClient } = await import('~/features/auth/auth-client');
-    const session: any = await authClient.getSession();
-    if (!session?.user) return null;
+    const sessionResult = await authClient.getSession();
+    if (!('data' in sessionResult) || !sessionResult.data?.user) return null;
 
-    const user = session.user;
+    const user = sessionResult.data.user;
     const userId = normalizeUserId(user);
     if (!userId) return null;
 
@@ -83,7 +78,9 @@ async function getCurrentUserClient(): Promise<AuthenticatedUser | null> {
     return {
       id: userId,
       email: userEmail,
-      role: user.role === USER_ROLES.ADMIN ? USER_ROLES.ADMIN : USER_ROLES.USER,
+      // Better Auth's browser session does not include our app-specific role.
+      // Server callers needing authorization query the profile through Convex.
+      role: USER_ROLES.USER,
       name: typeof user.name === 'string' ? user.name : undefined,
     };
   } catch {
@@ -100,17 +97,4 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     return getCurrentUserServer();
   }
   return getCurrentUserClient();
-}
-
-/**
- * Require authentication - throws redirect if not authenticated
- */
-export async function requireAuth(): Promise<AuthResult> {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    throw redirect({ to: '/login' });
-  }
-
-  return { user };
 }

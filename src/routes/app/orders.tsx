@@ -1,15 +1,14 @@
 import { api } from '@convex/_generated/api';
 import { createFileRoute } from '@tanstack/react-router';
-import { useQuery } from 'convex/react';
+import { useConvexAuth, useQuery } from 'convex/react';
 import { format } from 'date-fns';
-import { Package, DollarSign, Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock } from 'lucide-react';
 import { PageHeader } from '~/components/PageHeader';
 import { AdminErrorBoundary } from '~/components/RouteErrorBoundaries';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Badge } from '~/components/ui/badge';
-import { Separator } from '~/components/ui/separator';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Skeleton } from '~/components/ui/skeleton';
-import { useAuth } from '~/features/auth/hooks/useAuth';
+import { formatMoney } from '~/lib/money';
 
 export const Route = createFileRoute('/app/orders')({
   component: OrdersPage,
@@ -17,9 +16,8 @@ export const Route = createFileRoute('/app/orders')({
 });
 
 function OrdersPage() {
-  const { user } = useAuth();
-
-  const ordersQuery = useQuery(api.orders.listByUser, {});
+  const { isAuthenticated } = useConvexAuth();
+  const ordersQuery = useQuery(api.orders.listByUser, isAuthenticated ? {} : 'skip');
   const isLoading = ordersQuery === undefined;
 
   // Group orders by date for display
@@ -53,7 +51,7 @@ function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="My Orders" description="View and manage your flash sale orders" />
+      <PageHeader title="My Orders" description="View and manage your chef-drop orders" />
 
       {isLoading ? (
         <div className="space-y-4">
@@ -74,16 +72,16 @@ function OrdersPage() {
           <CardHeader>
             <CardTitle>No Orders Yet</CardTitle>
             <CardDescription>
-              You haven't placed any orders yet. Browse flash sales to get started.
+              You haven't placed any orders yet. Claim a plate from a chef drop to get started.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <a href="/app/flashSales">
+            <a href="/">
               <button
                 type="button"
                 className="bg-primary text-primary-foreground px-4 py-2 rounded-md"
               >
-                View Flash Sales
+                Find a chef drop
               </button>
             </a>
           </CardContent>
@@ -141,7 +139,9 @@ function OrdersPage() {
                           </div>
                           <div>
                             <div className="text-sm text-muted-foreground">Amount</div>
-                            <div className="font-semibold">${(order.amount / 100).toFixed(2)}</div>
+                            <div className="font-semibold">
+                              {formatMoney(order.amount, order.currency)}
+                            </div>
                           </div>
                           <div>
                             <div className="text-sm text-muted-foreground">Currency</div>
@@ -153,9 +153,9 @@ function OrdersPage() {
                           </div>
                         </div>
 
-                        {order.dodoPaymentId && (
+                        {order.paymentReference && (
                           <div className="text-xs text-muted-foreground pt-2 border-t">
-                            Payment ID: {order.dodoPaymentId}
+                            Paystack reference: {order.paymentReference}
                           </div>
                         )}
 

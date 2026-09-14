@@ -1,15 +1,7 @@
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
-import {
-  Cloud,
-  LogOut,
-  type LucideIcon,
-  Menu,
-  Shield,
-  ShoppingBag,
-  Package,
-  User,
-} from 'lucide-react';
+import { LogOut, type LucideIcon, Menu, Package, Shield, ShoppingBag, User } from 'lucide-react';
 import { useState } from 'react';
+import { FiresalesMark } from '~/components/FiresalesMark';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '~/components/ui/sheet';
 import { signOut } from '~/features/auth/auth-client';
 import { useAuth } from '~/features/auth/hooks/useAuth';
@@ -38,10 +30,9 @@ export function MobileNavigation() {
 
   const navItems: NavItem[] = isAuthenticated
     ? [
-        { to: '/app', label: 'Dashboard', exact: true },
-        { to: '/app/flashSales', label: 'Flash Sales', icon: ShoppingBag },
-        { to: '/app/orders', label: 'Orders', icon: Package },
-        { to: '/app/ai-playground', label: 'AI Playground', icon: Cloud },
+        { to: '/app/seller/dashboard', label: 'Chef dashboard', exact: true },
+        { to: '/dashboard/flash-sales', label: 'Drops', icon: ShoppingBag },
+        { to: '/dashboard/flash-sales/create', label: 'Create a drop', icon: Package },
       ]
     : [];
 
@@ -81,15 +72,12 @@ export function MobileNavigation() {
               to="/"
               preload="intent"
               onClick={() => setOpen(false)}
-              className="focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded"
+              aria-label="Firesales home"
+              className="rounded focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
-              <img
-                src="/android-chrome-192x192.png"
-                alt="TanStack Start Template Logo"
-                className="w-8 h-8 rounded hover:opacity-80 transition-opacity"
-              />
+              <FiresalesMark compact />
             </Link>
-            <SheetTitle>TanStack Start Template</SheetTitle>
+            <SheetTitle className="font-editorial text-xl">Firesales</SheetTitle>
           </div>
         </SheetHeader>
         <div className="flex flex-col mx-2">
@@ -165,7 +153,7 @@ export function MobileNavigation() {
                 <Link
                   to="/login"
                   preload="intent"
-                  search={{ reset: '', redirect: location.pathname }}
+                  search={{ redirect: location.pathname }}
                   onClick={handleLinkClick}
                   className="block w-full px-3 py-2 text-sm text-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
                 >
@@ -175,9 +163,9 @@ export function MobileNavigation() {
                   to="/register"
                   preload="intent"
                   onClick={handleLinkClick}
-                  className="block w-full px-3 py-2 text-sm text-center bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                  className="block w-full rounded-xl bg-primary px-3 py-2 text-center text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90"
                 >
-                  Sign up
+                  Start a drop
                 </Link>
               </div>
             )}

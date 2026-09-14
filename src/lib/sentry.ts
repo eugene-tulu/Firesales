@@ -1,25 +1,7 @@
 import * as Sentry from '@sentry/tanstackstart-react';
 import type { AnyRouter } from '@tanstack/react-router';
-import type { RouterAuthContext } from '~/router';
 
 let sentryInitialized = false;
-
-/**
- * Set user context in Sentry for authenticated users
- * This ensures user name, email, and ID appear in replays and other tracking
- */
-export function setSentryUser(user: RouterAuthContext['user']) {
-  if (user) {
-    Sentry.setUser({
-      id: user.id,
-      email: user.email,
-      username: user.name || undefined,
-    });
-  } else {
-    // Clear user context when user is not authenticated
-    Sentry.setUser(null);
-  }
-}
 
 /**
  * Set server-side Sentry user context for authenticated users

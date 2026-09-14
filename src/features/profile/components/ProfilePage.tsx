@@ -230,7 +230,7 @@ export function ProfilePage() {
           <Field orientation="vertical">
             <FieldLabel>Role</FieldLabel>
             <Input
-              value={profile.role === USER_ROLES.ADMIN ? 'Administrator' : 'User'}
+              value={profile.role === USER_ROLES.PLATFORM_ADMIN ? 'Platform administrator' : 'Chef'}
               disabled
               className="bg-muted capitalize"
             />

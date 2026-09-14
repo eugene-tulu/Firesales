@@ -1,8 +1,8 @@
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
-import { internalMutation, mutation } from './_generated/server';
+import { internalMutation } from './_generated/server';
 
-export const createUserProfileIfNotExists = mutation({
+export const createUserProfileIfNotExists = internalMutation({
   args: {
     userId: v.string(),
     role: v.optional(v.union(v.literal('seller'), v.literal('platform_admin'))),
@@ -18,7 +18,6 @@ export const createUserProfileIfNotExists = mutation({
     const id = await ctx.db.insert('userProfiles', {
       userId: args.userId,
       role: args.role || 'seller',
-      dodoConnected: false,
       freeScrapesUsed: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),

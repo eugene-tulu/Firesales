@@ -1,13 +1,15 @@
 import type { Doc } from '@convex/_generated/dataModel';
 
-// Use generated Convex type for consistency
 export type UserProfile = Doc<'userProfiles'>;
-export type UserRole = UserProfile['role']; // Auto-generated: 'user' | 'admin'
+export type UserRole = UserProfile['role'];
 
-// Role constants for type-safe usage
 export const USER_ROLES = {
-  USER: 'user' as UserRole,
-  ADMIN: 'admin' as UserRole,
-} as const;
+  SELLER: 'seller',
+  PLATFORM_ADMIN: 'platform_admin',
+  // Compatibility aliases for account-management code that predates the
+  // chef/platform role vocabulary.
+  USER: 'seller',
+  ADMIN: 'platform_admin',
+} as const satisfies Record<string, UserRole>;
 
-export const DEFAULT_ROLE: UserRole = USER_ROLES.USER;
+export const DEFAULT_ROLE: UserRole = USER_ROLES.SELLER;

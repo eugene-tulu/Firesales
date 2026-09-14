@@ -1,78 +1,103 @@
 import { v } from 'convex/values';
-import { assertUserId } from '../src/lib/shared/user-id';
-import { api, internal } from './_generated/api';
-import { action, mutation, query } from './_generated/server';
+import { assertUserId, normalizeUserId } from '../src/lib/shared/user-id';
+import type { Doc } from './_generated/dataModel';
+import { mutation, type QueryCtx, query } from './_generated/server';
 import { authComponent } from './auth';
 
-// Create a new flash sale
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function makeSaleUrl() {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+}
+
+function cleanOptionalText(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+async function getDropSummary(ctx: QueryCtx, flashSale: Doc<'flashSales'>) {
+  const [product, waitlist, paidOrders] = await Promise.all([
+    ctx.db.get(flashSale.productId),
+    ctx.db
+      .query('waitlist')
+      .withIndex('by_flashSaleId', (q) => q.eq('flashSaleId', flashSale._id))
+      .collect(),
+    ctx.db
+      .query('orders')
+      .withIndex('by_flashSaleId', (q) => q.eq('flashSaleId', flashSale._id))
+      .collect(),
+  ]);
+
+  return {
+    ...flashSale,
+    product,
+    waitlistCount: waitlist.length,
+    guestCount: paidOrders.filter((order) => order.status === 'paid').length,
+    reservedInventory: flashSale.reservedInventory ?? 0,
+  };
+}
+
+// "flashSales" is retained as the table name. In the product it is a chef drop:
+// a fixed batch of plates released to a guest list at a specific moment.
 export const create = mutation({
   args: {
     productId: v.id('products'),
     allocatedInventory: v.number(),
+    dropTitle: v.optional(v.string()),
+    chefNote: v.optional(v.string()),
+    pickupDetails: v.optional(v.string()),
+    waitlistOpen: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const userId = assertUserId(authUser, 'Authentication required');
 
-    // Verify the product belongs to the user
-    const product = await ctx.db.get(args.productId);
-    if (!product || product.userId !== userId) {
-      throw new Error('Product not found or unauthorized');
+    if (!Number.isInteger(args.allocatedInventory) || args.allocatedInventory < 1) {
+      throw new Error('Drop capacity must be a whole number of at least one plate.');
     }
 
-    // Generate a unique sale URL using cryptographically secure random
-    // Using 8 random bytes encoded in base36 gives ~12 chars of randomness
-    const randomBytes = new Uint8Array(6);
-    crypto.getRandomValues(randomBytes);
-    const saleUrl = Buffer.from(randomBytes).toString('base64url').substring(0, 8);
+    const product = await ctx.db.get(args.productId);
+    if (!product || product.userId !== userId) {
+      throw new Error('Menu item not found or unauthorized');
+    }
 
-    // Create the flash sale
+    let saleUrl = makeSaleUrl();
+    // Extremely unlikely, but protect the public route from a collision.
+    while (
+      await ctx.db
+        .query('flashSales')
+        .withIndex('by_saleUrl', (q) => q.eq('saleUrl', saleUrl))
+        .first()
+    ) {
+      saleUrl = makeSaleUrl();
+    }
+
+    const now = Date.now();
     const flashSaleId = await ctx.db.insert('flashSales', {
       productId: args.productId,
       allocatedInventory: args.allocatedInventory,
       saleUrl,
       status: 'draft',
       userId,
+      dropTitle: cleanOptionalText(args.dropTitle) ?? product.name,
+      chefNote: cleanOptionalText(args.chefNote),
+      pickupDetails: cleanOptionalText(args.pickupDetails),
+      waitlistOpen: args.waitlistOpen ?? true,
       totalSales: 0,
       totalRevenue: 0,
       remainingInventory: args.allocatedInventory,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      reservedInventory: 0,
+      createdAt: now,
+      updatedAt: now,
     });
 
-    // Update the product status to active if it's not already
     if (product.status !== 'active') {
       await ctx.db.patch(args.productId, {
         status: 'active',
-        publishedAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-    }
-
-    // Initialize inventory for the product with the allocated amount (if not exists)
-    const existingInventory = await ctx.db
-      .query('inventory')
-      .withIndex('by_productId', (q) => q.eq('productId', args.productId))
-      .first();
-
-    if (!existingInventory) {
-      await ctx.db.insert('inventory', {
-        productId: args.productId,
-        totalUnits: args.allocatedInventory,
-        availableUnits: args.allocatedInventory,
-        reservedUnits: 0,
-        soldUnits: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-    } else {
-      // Optionally update total units if increased (ensure availableUnits stays consistent)
-      const newTotal = Math.max(existingInventory.totalUnits, args.allocatedInventory);
-      const delta = newTotal - existingInventory.totalUnits;
-      await ctx.db.patch(existingInventory._id, {
-        totalUnits: newTotal,
-        availableUnits: existingInventory.availableUnits + delta,
-        updatedAt: Date.now(),
+        publishedAt: now,
+        updatedAt: now,
       });
     }
 
@@ -85,138 +110,143 @@ export const list = query({
   handler: async (ctx) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const sellerId = assertUserId(authUser, 'Authentication required');
-
     const flashSales = await ctx.db
       .query('flashSales')
       .withIndex('by_userId', (q) => q.eq('userId', sellerId))
       .order('desc')
       .collect();
 
-    const flashSalesWithProducts = await Promise.all(
-      flashSales.map(async (flashSale) => {
-        const product = await ctx.db.get(flashSale.productId);
-        return { ...flashSale, product };
-      }),
-    );
-
-    return flashSalesWithProducts;
+    return Promise.all(flashSales.map((flashSale) => getDropSummary(ctx, flashSale)));
   },
 });
 
-// Get a single flash sale by ID — verifies ownership
+// Get a single drop by ID, only for its chef.
 export const get = query({
-  args: {
-    flashSaleId: v.id('flashSales'),
-  },
+  args: { flashSaleId: v.id('flashSales') },
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     if (!authUser) return null;
 
     const sellerId = assertUserId(authUser, 'Authentication required');
-
     const flashSale = await ctx.db.get(args.flashSaleId);
-    if (!flashSale) return null;
+    if (!flashSale || flashSale.userId !== sellerId) return null;
 
-    if (flashSale.userId !== sellerId) {
-      return null;
-    }
-
-    const product = await ctx.db.get(flashSale.productId);
-
-    return {
-      ...flashSale,
-      product,
-    };
+    return getDropSummary(ctx, flashSale);
   },
 });
 
-// Get flash sale by sale URL (for public viewing)
+// Public view for guests. Drafts are visible only to their authenticated owner
+// as a preview; ownership is derived from the auth token, never caller input.
 export const getBySaleUrl = query({
-  args: {
-    saleUrl: v.string(),
-    viewerUserId: v.optional(v.string()),
-  },
+  args: { saleUrl: v.string() },
   handler: async (ctx, args) => {
     const flashSale = await ctx.db
       .query('flashSales')
       .withIndex('by_saleUrl', (q) => q.eq('saleUrl', args.saleUrl))
       .first();
+    if (!flashSale) return null;
 
-    if (!flashSale) {
-      return null;
+    let authUser: unknown = null;
+    try {
+      authUser = await authComponent.getAuthUser(ctx);
+    } catch {
+      // A guest is allowed to see only live/completed drops.
     }
-
-    const product = await ctx.db.get(flashSale.productId);
-
-    const isPreviewing = args.viewerUserId === flashSale.userId;
-    const showPreview = flashSale.status === 'draft' || flashSale.status === 'live';
-    if (!showPreview && !isPreviewing) {
+    const isOwner = normalizeUserId(authUser) === flashSale.userId;
+    if (!isOwner && flashSale.status !== 'live' && flashSale.status !== 'completed') {
       return null;
     }
 
     return {
-      ...flashSale,
-      product,
-      isPreview: flashSale.status === 'draft',
+      ...(await getDropSummary(ctx, flashSale)),
+      isPreview: isOwner && flashSale.status === 'draft',
     };
   },
 });
 
-// Go live with a flash sale
 export const goLive = mutation({
-  args: {
-    flashSaleId: v.id('flashSales'),
-  },
+  args: { flashSaleId: v.id('flashSales') },
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const userId = assertUserId(authUser, 'Authentication required');
-
-    // Verify the flash sale belongs to the user
     const flashSale = await ctx.db.get(args.flashSaleId);
+
     if (!flashSale || flashSale.userId !== userId) {
-      throw new Error('Flash sale not found or unauthorized');
+      throw new Error('Drop not found or unauthorized');
+    }
+    if (flashSale.status === 'completed') {
+      throw new Error('This drop is complete. Create a new drop for the next batch.');
+    }
+    if (flashSale.status === 'live') {
+      return { flashSaleId: args.flashSaleId, alreadyLive: true };
     }
 
-    // Update the flash sale status to live
+    const now = Date.now();
     await ctx.db.patch(args.flashSaleId, {
       status: 'live',
-      startedAt: Date.now(),
-      updatedAt: Date.now(),
+      startedAt: now,
+      updatedAt: now,
     });
 
-    return args.flashSaleId;
+    return { flashSaleId: args.flashSaleId, alreadyLive: false };
   },
 });
 
-// Update flash sale stats when a purchase is made
-export const updateStats = mutation({
+export const joinWaitlist = mutation({
   args: {
-    flashSaleId: v.id('flashSales'),
-    quantity: v.number(),
-    amount: v.number(),
+    saleUrl: v.string(),
+    email: v.string(),
+    name: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const flashSale = await ctx.db.get(args.flashSaleId);
-    if (!flashSale) {
-      throw new Error('Flash sale not found');
+    const email = args.email.trim().toLowerCase();
+    if (!emailPattern.test(email)) {
+      throw new Error('Enter a valid email address.');
     }
 
-    // Update stats
-    await ctx.db.patch(args.flashSaleId, {
-      totalSales: flashSale.totalSales + args.quantity,
-      totalRevenue: flashSale.totalRevenue + args.amount,
-      remainingInventory: flashSale.remainingInventory - args.quantity,
-      updatedAt: Date.now(),
+    const flashSale = await ctx.db
+      .query('flashSales')
+      .withIndex('by_saleUrl', (q) => q.eq('saleUrl', args.saleUrl))
+      .first();
+    if (!flashSale || !flashSale.waitlistOpen) {
+      throw new Error('The waitlist is not available for this drop.');
+    }
+
+    const existing = await ctx.db
+      .query('waitlist')
+      .withIndex('by_flashSaleId_email', (q) =>
+        q.eq('flashSaleId', flashSale._id).eq('email', email),
+      )
+      .first();
+    if (existing) {
+      return { joined: false, alreadyJoined: true };
+    }
+
+    await ctx.db.insert('waitlist', {
+      flashSaleId: flashSale._id,
+      email,
+      name: cleanOptionalText(args.name),
+      createdAt: Date.now(),
     });
 
-    // Check if the sale is completed
-    const updatedFlashSale = await ctx.db.get(args.flashSaleId);
-    if (updatedFlashSale && updatedFlashSale.remainingInventory <= 0) {
-      await ctx.db.patch(args.flashSaleId, {
-        status: 'completed',
-        endedAt: Date.now(),
-        updatedAt: Date.now(),
-      });
+    return { joined: true, alreadyJoined: false };
+  },
+});
+
+export const getWaitlist = query({
+  args: { flashSaleId: v.id('flashSales') },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const userId = assertUserId(authUser, 'Authentication required');
+    const flashSale = await ctx.db.get(args.flashSaleId);
+    if (!flashSale || flashSale.userId !== userId) {
+      throw new Error('Drop not found or unauthorized');
     }
+
+    return ctx.db
+      .query('waitlist')
+      .withIndex('by_flashSaleId', (q) => q.eq('flashSaleId', args.flashSaleId))
+      .order('desc')
+      .collect();
   },
 });

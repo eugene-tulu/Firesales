@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { LogOut, Shield, User } from 'lucide-react';
+import { FiresalesMark } from '~/components/FiresalesMark';
 import { MobileNavigation } from '~/components/MobileNavigation';
 import { ThemeToggle } from '~/components/theme-toggle';
 import {
@@ -97,21 +98,21 @@ function AuthNavigation({ currentPath }: { currentPath: string }) {
   }
 
   return (
-    <div className="flex items-center space-x-4">
+    <div className="flex items-center gap-2 sm:gap-3">
       <Link
         to="/login"
         preload="intent"
-        search={{ reset: '', redirect: currentPath }}
-        className="text-sm text-muted-foreground hover:text-foreground"
+        search={{ redirect: currentPath }}
+        className="rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         Sign in
       </Link>
       <Link
         to="/register"
         preload="intent"
-        className="text-sm bg-primary text-primary-foreground px-3 py-2 rounded-md hover:bg-primary/90"
+        className="rounded-xl bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-transform hover:-translate-y-0.5 hover:bg-primary/90"
       >
-        Sign up
+        Start a drop
       </Link>
     </div>
   );
@@ -125,88 +126,75 @@ export function AppNavigation() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <nav className="bg-card shadow-sm border-b">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 overflow-visible">
-          {/* Mobile Logo - Left side */}
+    <nav className="sticky top-0 z-50 border-b border-border/80 bg-background/85 backdrop-blur-xl">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex h-[4.5rem] justify-between overflow-visible">
           <div className="flex items-center md:hidden">
             <Link
               to="/"
               preload="intent"
-              className="focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded"
+              aria-label="Firesales home"
+              className="rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
-              <img
-                src="/android-chrome-192x192.png"
-                alt="TanStack Start Template Logo"
-                className="w-8 h-8 rounded hover:opacity-80 transition-opacity"
-              />
+              <FiresalesMark compact />
             </Link>
           </div>
 
-          {/* Desktop Navigation - Hidden on mobile */}
-          <div className="hidden md:flex items-center space-x-2">
-            {/* Logo */}
+          <div className="hidden items-center gap-7 md:flex">
             <Link
               to="/"
               preload="intent"
-              className="focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded"
+              className="rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
-              <img
-                src="/android-chrome-192x192.png"
-                alt="TanStack Start Template Logo"
-                className="w-8 h-8 rounded hover:opacity-80 transition-opacity"
-              />
+              <FiresalesMark />
             </Link>
 
-            {/* Navigation Links */}
             {isAuthenticated && (
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-1 rounded-full border border-border/80 bg-card/70 p-1">
                 <Link
-                  to="/app"
+                  to="/app/seller/dashboard"
                   preload="intent"
-                  className={cn(navigationMenuTriggerStyle(), 'no-underline')}
+                  className={cn(
+                    navigationMenuTriggerStyle(),
+                    'h-8 rounded-full bg-transparent px-3 text-xs font-semibold no-underline',
+                  )}
                   activeOptions={{ exact: true }}
                 >
-                  Dashboard
+                  Studio
                 </Link>
                 <Link
-                  to="/app/flashSales"
+                  to="/dashboard/flash-sales"
                   preload="intent"
-                  className={cn(navigationMenuTriggerStyle(), 'no-underline')}
+                  className={cn(
+                    navigationMenuTriggerStyle(),
+                    'h-8 rounded-full bg-transparent px-3 text-xs font-semibold no-underline',
+                  )}
                 >
-                  Flash Sales
+                  Your drops
                 </Link>
                 <Link
-                  to="/app/orders"
+                  to="/dashboard/flash-sales/create"
                   preload="intent"
-                  className={cn(navigationMenuTriggerStyle(), 'no-underline')}
+                  className={cn(
+                    navigationMenuTriggerStyle(),
+                    'h-8 rounded-full bg-transparent px-3 text-xs font-semibold no-underline',
+                  )}
                 >
-                  Orders
-                </Link>
-                <Link
-                  to="/app/ai-playground"
-                  preload="intent"
-                  className={cn(navigationMenuTriggerStyle(), 'no-underline')}
-                >
-                  AI Playground
+                  Create
                 </Link>
               </div>
             )}
           </div>
 
-          {/* Right side - Mobile menu on mobile, Auth nav on desktop */}
           <div className="flex items-center">
-            {/* Mobile Navigation - Right side */}
             <div className="md:hidden">
               <MobileNavigation />
             </div>
 
-            {/* Theme Toggle */}
-            <div className="hidden md:block mr-2">
+            <div className="mr-2 hidden md:block">
               <ThemeToggle />
             </div>
 
-            {/* Desktop Auth Navigation */}
             <div className="hidden md:block">
               <AuthNavigation currentPath={location.pathname} />
             </div>

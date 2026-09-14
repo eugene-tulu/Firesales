@@ -75,7 +75,7 @@ function ForgotPasswordPage() {
   }
 
   if (isAuthenticated) {
-    throw redirect({ to: '/app' });
+    throw redirect({ to: '/app/seller/dashboard' });
   }
 
   if (isSubmitted) {
@@ -120,7 +120,7 @@ function ForgotPasswordPage() {
             >
               <img
                 src="/android-chrome-192x192.png"
-                alt="TanStack Start Template Logo"
+                alt="Firesales"
                 className="w-12 h-12 rounded hover:opacity-80 transition-opacity"
               />
             </Link>

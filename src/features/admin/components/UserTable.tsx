@@ -31,7 +31,7 @@ interface UserTableProps {
     secondarySortBy: 'name' | 'email' | 'role' | 'emailVerified' | 'createdAt';
     secondarySortOrder: 'asc' | 'desc';
     search: string;
-    role: 'all' | 'admin' | 'user';
+    role: 'all' | 'seller' | 'platform_admin';
   };
   isLoading: boolean;
   isFetching?: boolean;
@@ -119,7 +119,7 @@ export function UserTable({
         header: createSortableHeader('Role', 'role', searchParams, handleSorting),
         cell: ({ row }) => {
           const role = row.original.role ?? DEFAULT_ROLE;
-          const isAdmin = role === USER_ROLES.ADMIN;
+          const isAdmin = role === USER_ROLES.PLATFORM_ADMIN;
           const roleLabel = `${role.slice(0, 1).toUpperCase()}${role.slice(1)}`;
 
           return (

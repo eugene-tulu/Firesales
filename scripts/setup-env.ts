@@ -29,19 +29,19 @@ async function main() {
 
   const envPath = join(process.cwd(), '.env.local');
 
-   // Check if .env.local already exists
-   if (existsSync(envPath)) {
-     const existing = readFileSync(envPath, 'utf8');
-     const hasSecret = /^BETTER_AUTH_SECRET=/m.test(existing);
-     if (hasSecret) {
-       console.log('✅ .env.local already configured. No changes made.');
-       return;
-     }
-     const secretLine = `BETTER_AUTH_SECRET=${authSecret}\n`;
-     appendFileSync(envPath, secretLine);
-     console.log('✅ Added BETTER_AUTH_SECRET to existing .env.local.');
-     return;
-   }
+  // Check if .env.local already exists
+  if (existsSync(envPath)) {
+    const existing = readFileSync(envPath, 'utf8');
+    const hasSecret = /^BETTER_AUTH_SECRET=/m.test(existing);
+    if (hasSecret) {
+      console.log('✅ .env.local already configured. No changes made.');
+      return;
+    }
+    const secretLine = `BETTER_AUTH_SECRET=${authSecret}\n`;
+    appendFileSync(envPath, secretLine);
+    console.log('✅ Added BETTER_AUTH_SECRET to existing .env.local.');
+    return;
+  }
 
   // Create .env.local with all defaults
   const envContent = `# Local Development Environment
@@ -63,7 +63,7 @@ BETTER_AUTH_SECRET=${authSecret}
 NODE_ENV=development
 
 # Application name for email templates
-APP_NAME="TanStack Start Template"
+APP_NAME="Firesales"
 
 # ==========================================
 # RESEND EMAIL SETUP
@@ -102,12 +102,15 @@ S3_PUBLIC_URL=http://localhost:9000
 # VITE_CONVEX_SITE_URL= set after running: pnpm run setup:convex
 
 # ==========================================
-# AUTUMN BILLING (Optional)
+# FIRESALES SERVICES
 # ==========================================
 
-# Optional: Autumn product ID for credit purchases
-# Get from: https://useautumn.com dashboard after creating a credit package
-VITE_AUTUMN_50_CREDITS_ID=prod_50_credits
+# Configure these in the Convex environment before testing live checkout:
+# PAYSTACK_SECRET_KEY=
+# PAYSTACK_CURRENCY=KES
+# CLOUDFLARE_WORKER_URL=
+# CLOUDFLARE_WORKER_TOKEN=
+# FIRECRAWL_API_KEY=
 `;
 
   writeFileSync(envPath, envContent, 'utf8');
@@ -116,7 +119,7 @@ VITE_AUTUMN_50_CREDITS_ID=prod_50_credits
   console.log(`   📁 Created: ${envPath}`);
   console.log('────────────────────────────────────────────────');
   console.log('🔑 Generated Secrets:');
-  console.log(`   BETTER_AUTH_SECRET: ${authSecret.substring(0, 10)}...`);
+  console.log('   BETTER_AUTH_SECRET: created and stored only in .env.local');
   console.log('────────────────────────────────────────────────\n');
   console.log('🚀 Next steps:');
   console.log('   1. 📋 Review the generated .env.local file');

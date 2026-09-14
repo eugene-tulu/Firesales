@@ -1,97 +1,76 @@
 /**
- * Cloudflare Worker Client for Atomic Inventory Operations
- * This module provides functions to interact with the Cloudflare Worker that handles atomic inventory operations
+ * Client for the Cloudflare Durable Object that owns a drop's hot inventory
+ * counter. Convex remains the durable business record; this service is the
+ * single writer for concurrent holds and confirmations.
  */
 
 const getWorkerConfig = () => {
   const url = process.env.CLOUDFLARE_WORKER_URL;
   const token = process.env.CLOUDFLARE_WORKER_TOKEN;
 
-  if (!url) {
-    throw new Error('CLOUDFLARE_WORKER_URL environment variable is required');
-  }
-  if (!token) {
-    throw new Error('CLOUDFLARE_WORKER_TOKEN environment variable is required for authentication');
-  }
+  if (!url) throw new Error('CLOUDFLARE_WORKER_URL environment variable is required');
+  if (!token) throw new Error('CLOUDFLARE_WORKER_TOKEN environment variable is required');
 
-  return { url, token };
+  return { url: url.replace(/\/$/, ''), token };
 };
 
-interface InventoryRequest {
-  productId: string;
-  quantity?: number;
-  sessionId?: string;
-  reservationId?: string;
-}
-
-interface InventoryResponse {
+export interface InventoryResponse {
   success: boolean;
   availableUnits?: number;
+  reservedUnits?: number;
+  soldUnits?: number;
   error?: string;
   reservationId?: string;
 }
 
-// Function to check available inventory
-export async function checkInventory(productId: string): Promise<InventoryResponse> {
+async function send(path: string, init: RequestInit): Promise<InventoryResponse> {
   const { url, token } = getWorkerConfig();
-  const response = await fetch(`${url}/inventory/${productId}`, {
-    method: 'GET',
+  const response = await fetch(`${url}${path}`, {
+    ...init,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      ...init.headers,
     },
   });
 
-  return response.json();
+  const payload = (await response.json().catch(() => ({}))) as InventoryResponse;
+  if (!response.ok && !payload.error) {
+    return { success: false, error: `Inventory service returned ${response.status}.` };
+  }
+  return payload;
 }
 
-// Function to reserve inventory
-export async function reserveInventory(request: InventoryRequest): Promise<InventoryResponse> {
-  const { url, token } = getWorkerConfig();
-  const response = await fetch(`${url}/inventory/reserve`, {
+export function reserveInventory(request: {
+  saleId: string;
+  totalUnits: number;
+  quantity: number;
+  sessionId: string;
+}) {
+  return send('/inventory/reserve', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
     body: JSON.stringify(request),
   });
-
-  return response.json();
 }
 
-// Function to confirm inventory reservation (convert to sale)
-export async function confirmReservation(request: {
+export function confirmReservation(request: {
+  saleId: string;
   reservationId: string;
   sessionId: string;
-}): Promise<InventoryResponse> {
-  const { url, token } = getWorkerConfig();
-  const response = await fetch(`${url}/inventory/confirm`, {
+}) {
+  return send('/inventory/confirm', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
     body: JSON.stringify(request),
   });
-
-  return response.json();
 }
 
-// Function to release inventory reservation
-export async function releaseReservation(request: {
+export function releaseReservation(request: {
+  saleId: string;
   reservationId: string;
   sessionId: string;
-}): Promise<InventoryResponse> {
-  const { url, token } = getWorkerConfig();
-  const response = await fetch(`${url}/inventory/release`, {
+}) {
+  return send('/inventory/release', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
     body: JSON.stringify(request),
   });
-
-  return response.json();
 }

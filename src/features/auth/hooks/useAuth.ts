@@ -1,5 +1,5 @@
 import { api } from '@convex/_generated/api';
-import { useQuery } from 'convex/react';
+import { useConvexAuth, useQuery } from 'convex/react';
 import { useMemo } from 'react';
 import { useSession } from '~/features/auth/auth-client';
 import type { UserRole } from '../types';
@@ -31,9 +31,12 @@ export function useAuth(options: AuthOptions = {}): AuthResult {
   // Use the lightweight auth state hook
   const authState = useAuthState();
   const { data: session, isPending: sessionPending } = useSession();
+  const convexAuth = useConvexAuth();
 
-  // Only fetch profile if we have a session user, we're not already loading, AND role fetching is enabled
-  const shouldFetchProfile = authState.isAuthenticated && !sessionPending && fetchRole;
+  // The Better Auth browser session and the Convex JWT hand-off resolve independently.
+  // Do not start a protected query until both have completed.
+  const shouldFetchProfile =
+    authState.isAuthenticated && !sessionPending && convexAuth.isAuthenticated && fetchRole;
 
   // Pass "skip" to avoid running the Convex query when profile data is not needed
   const profileQueryResult = useQuery(
@@ -41,19 +44,17 @@ export function useAuth(options: AuthOptions = {}): AuthResult {
     shouldFetchProfile ? {} : 'skip',
   );
 
-  // Only use profile data when we should be fetching it
-  const profile = shouldFetchProfile ? profileQueryResult : undefined;
-
   const isPending =
     sessionPending ||
-    (authState.isAuthenticated && shouldFetchProfile && profileQueryResult === undefined);
+    (authState.isAuthenticated &&
+      (convexAuth.isLoading || (shouldFetchProfile && profileQueryResult === undefined)));
 
   // Determine role: use profile role if available, otherwise default to user
   // If we're not fetching roles, default to user
   const role: UserRole = shouldFetchProfile
-    ? profileQueryResult?.role === USER_ROLES.ADMIN
-      ? USER_ROLES.ADMIN
-      : USER_ROLES.USER
+    ? profileQueryResult?.role === USER_ROLES.PLATFORM_ADMIN || profileQueryResult?.role === 'admin'
+      ? USER_ROLES.PLATFORM_ADMIN
+      : USER_ROLES.SELLER
     : DEFAULT_ROLE;
 
   // Memoize return value to prevent unnecessary re-renders
@@ -67,7 +68,7 @@ export function useAuth(options: AuthOptions = {}): AuthResult {
           }
         : null,
       isAuthenticated: authState.isAuthenticated,
-      isAdmin: role === USER_ROLES.ADMIN,
+      isAdmin: role === USER_ROLES.PLATFORM_ADMIN,
       isPending,
       error: null, // Convex errors are typically handled by throwing, not returned as properties
     }),

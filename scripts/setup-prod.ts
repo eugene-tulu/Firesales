@@ -6,8 +6,36 @@
  * Run: pnpm run setup:prod
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
+
+function getProductionConvexEnvironmentVariable(name: string): string | null {
+  const result = spawnSync('npx', ['convex', 'env', 'get', name, '--prod'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  if (result.error || result.status !== 0) {
+    throw new Error(`Could not inspect production ${name}. Refusing to change it.`);
+  }
+
+  const value = result.stdout.trim();
+  if (value) return value;
+
+  if (result.stderr.includes(`Environment variable "${name}" not found.`)) {
+    return null;
+  }
+
+  throw new Error(`Convex did not return a usable value for production ${name}.`);
+}
+
+function setProductionConvexEnvironmentVariable(name: string, value: string) {
+  execFileSync('npx', ['convex', 'env', 'set', name, value, '--prod'], {
+    cwd: process.cwd(),
+    stdio: 'pipe',
+  });
+}
 
 // Helper functions for user input
 async function askYesNo(question: string): Promise<boolean> {
@@ -45,27 +73,31 @@ async function setupConvexProduction(): Promise<{
 } | null> {
   console.log('\n🚀 Setting up Convex production...');
 
-  // Generate secrets
-  const betterAuthSecret = execSync('openssl rand -base64 32', { encoding: 'utf8' }).trim();
-
   console.log('\n⚙️  Setting production environment variables...');
+
+  const deployedAuthSecret = getProductionConvexEnvironmentVariable('BETTER_AUTH_SECRET');
+  if (deployedAuthSecret) {
+    console.log('   BETTER_AUTH_SECRET already exists; leaving it unchanged.');
+  } else {
+    const generatedAuthSecret = execFileSync('openssl', ['rand', '-base64', '32'], {
+      encoding: 'utf8',
+    }).trim();
+    console.log('   Setting BETTER_AUTH_SECRET for the first time...');
+    setProductionConvexEnvironmentVariable('BETTER_AUTH_SECRET', generatedAuthSecret);
+  }
 
   // Set production environment variables
   const prodEnvVars = [
-    { name: 'BETTER_AUTH_SECRET', value: betterAuthSecret },
-    { name: 'APP_NAME', value: 'TanStack Start Template' },
+    { name: 'APP_NAME', value: 'Firesales' },
     { name: 'RESEND_EMAIL_SENDER', value: 'onboarding@resend.dev' },
   ];
 
   for (const { name, value } of prodEnvVars) {
     try {
       console.log(`   Setting ${name}...`);
-      execSync(`npx convex env set ${name} "${value}" --prod`, {
-        stdio: 'pipe',
-        cwd: process.cwd(),
-      });
+      setProductionConvexEnvironmentVariable(name, value);
     } catch {
-      console.log(`   ⚠️  Failed to set ${name} (may already be set or you may not have access)`);
+      console.log(`   ⚠️  Failed to set ${name}`);
     }
   }
 
@@ -130,7 +162,6 @@ async function main() {
     // Get the values for the environment variables
     let convexUrl = '';
     let convexSiteUrl = '';
-    let betterAuthSecret = '';
 
     if (convexInfo?.convexUrl) {
       convexUrl = convexInfo.convexUrl;
@@ -161,16 +192,6 @@ async function main() {
       }
     }
 
-    // Get BETTER_AUTH_SECRET
-    try {
-      betterAuthSecret = execSync('npx convex env get BETTER_AUTH_SECRET --prod', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore'], // Suppress stderr
-      }).trim();
-    } catch {
-      betterAuthSecret = '[not found - will be prompted]';
-    }
-
     // Get the repository URL for instructions
     let repoUrl: string;
     try {
@@ -198,7 +219,10 @@ async function main() {
     console.log('4. Netlify will detect your netlify.toml file automatically');
     console.log('5. On the environment variables step, provide these values:');
     console.log('');
-    console.log(`   BETTER_AUTH_SECRET = ${betterAuthSecret}`);
+    console.log(
+      '   BETTER_AUTH_SECRET = use the existing production secret. Retrieve it securely with:',
+    );
+    console.log('     npx convex env get BETTER_AUTH_SECRET --prod');
     console.log(`   VITE_CONVEX_URL = ${convexUrl}`);
     console.log(`   VITE_CONVEX_SITE_URL = ${convexSiteUrl}`);
     console.log('');
@@ -242,10 +266,7 @@ async function main() {
       if (normalizedUrl) {
         try {
           console.log(`\n🔐 Setting BETTER_AUTH_SITE_URL to ${normalizedUrl}...`);
-          execSync(`npx convex env set BETTER_AUTH_SITE_URL "${normalizedUrl}" --prod`, {
-            stdio: 'pipe',
-            cwd: process.cwd(),
-          });
+          setProductionConvexEnvironmentVariable('BETTER_AUTH_SITE_URL', normalizedUrl);
           console.log('✅ BETTER_AUTH_SITE_URL configured in Convex production environment.');
         } catch {
           console.log(

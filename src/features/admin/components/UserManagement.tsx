@@ -11,12 +11,15 @@ import { UserDeleteDialog } from './UserDeleteDialog';
 import { UserEditDialog } from './UserEditDialog';
 import { UserTable } from './UserTable';
 
-type UserRoleFilterValue = 'all' | UserRole;
+type UserRoleFilterValue =
+  | 'all'
+  | typeof USER_ROLES.SELLER
+  | typeof USER_ROLES.PLATFORM_ADMIN;
 
 const ROLE_FILTER_OPTIONS: TableFilterOption<UserRoleFilterValue>[] = [
   { label: 'All roles', value: 'all' },
-  { label: 'Admin', value: USER_ROLES.ADMIN },
-  { label: 'User', value: USER_ROLES.USER },
+  { label: 'Platform admin', value: USER_ROLES.PLATFORM_ADMIN },
+  { label: 'Chef', value: USER_ROLES.SELLER },
 ];
 
 export function UserManagement() {

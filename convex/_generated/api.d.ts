@@ -9,13 +9,10 @@
  */
 
 import type * as admin from "../admin.js";
-import type * as ai from "../ai.js";
-import type * as aiResponses from "../aiResponses.js";
 import type * as auditLogs from "../auditLogs.js";
 import type * as auth from "../auth.js";
 import type * as authz_guardFactory from "../authz/guardFactory.js";
-import type * as autumn from "../autumn.js";
-import type * as cloudflareAi from "../cloudflareAi.js";
+import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as dashboardStats from "../dashboardStats.js";
 import type * as emails from "../emails.js";
@@ -27,7 +24,6 @@ import type * as inventory from "../inventory.js";
 import type * as orders from "../orders.js";
 import type * as payments from "../payments.js";
 import type * as products from "../products.js";
-import type * as reservations from "../reservations.js";
 import type * as userProfiles from "../userProfiles.js";
 import type * as users from "../users.js";
 
@@ -39,13 +35,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
-  ai: typeof ai;
-  aiResponses: typeof aiResponses;
   auditLogs: typeof auditLogs;
   auth: typeof auth;
   "authz/guardFactory": typeof authz_guardFactory;
-  autumn: typeof autumn;
-  cloudflareAi: typeof cloudflareAi;
+  crons: typeof crons;
   dashboard: typeof dashboard;
   dashboardStats: typeof dashboardStats;
   emails: typeof emails;
@@ -57,7 +50,6 @@ declare const fullApi: ApiFromModules<{
   orders: typeof orders;
   payments: typeof payments;
   products: typeof products;
-  reservations: typeof reservations;
   userProfiles: typeof userProfiles;
   users: typeof users;
 }>;
@@ -21525,5 +21517,4 @@ export declare const components: {
       getServerTime: FunctionReference<"mutation", "internal", {}, number>;
     };
   };
-  autumn: {};
 };

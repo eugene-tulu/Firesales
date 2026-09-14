@@ -101,7 +101,6 @@ export const setUserRole = guarded.mutation(
       await ctx.db.insert('userProfiles', {
         userId: args.userId,
         role: args.role,
-        dodoConnected: false,
         freeScrapesUsed: 0,
         createdAt: now,
         updatedAt: now,
@@ -257,6 +256,7 @@ export const getCurrentUserProfile = query({
       name: authUserTyped.name || null,
       phoneNumber: authUserTyped.phoneNumber || null,
       role: profile?.role || 'seller', // Default to 'seller' if no profile exists yet
+      freeScrapesUsed: profile?.freeScrapesUsed ?? 0,
       emailVerified: authUserTyped.emailVerified || false,
       createdAt,
       updatedAt,
@@ -282,22 +282,13 @@ export const getOrCreateProfile = action({
     }
     const userId = assertUserId(authUser, 'User ID not found');
 
-    // Check if profile already exists (reuse existing query)
-    const existing = await ctx.runQuery(api.users.getCurrentUserProfile, {});
-    if (existing) {
-      return existing;
-    }
-
-    // Profile missing — create it
-    // Determine role based on first user
-    const userCountResult = await ctx.runQuery(api.users.getUserCount, {});
-    const isFirstUser = userCountResult.isFirstUser;
-    const role = isFirstUser ? 'platform_admin' : 'seller';
-
-    // Create profile (idempotent via existing check inside mutation)
-    await ctx.runMutation(api.userProfiles.createUserProfileIfNotExists, {
+    // The underlying mutation is idempotent, so creating the profile here is
+    // safe even if a previous sign-in already created one. Do not infer the
+    // result from getCurrentUserProfile: that public query intentionally
+    // supplies a seller-shaped fallback while a profile is being created.
+    await ctx.runMutation(internal.userProfiles.createUserProfileIfNotExists, {
       userId,
-      role,
+      role: 'seller',
     });
 
     // Fetch the newly created profile

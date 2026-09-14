@@ -1,157 +1,98 @@
-# TanStack Start Template
+# Firesales
 
-A TanStack Start Template built with TanStack Start, featuring modern full-stack TypeScript architecture with end-to-end type safety, authentication, real-time database, and production-ready components.
+Firesales is the sold-out drop engine for independent chefs and food creators.
+It turns one menu item and a fixed batch into a shareable event: guests claim
+real plates, complete checkout, and join the next-drop list when the batch is
+gone. The aim is simple: cook against paid demand rather than chase orders in
+DMs.
 
-## 🎯 Demo Features
+## What a chef can do
 
-After registering and logging in, you can explore these demo features:
+1. Optionally import facts from a public menu, venue, booking, or social-link
+   page with Firecrawl.
+2. Review the draft, set a hero menu item, plate price, batch size, and pickup
+   details.
+3. Open one shareable drop link.
+4. Let guests hold plates for 15 minutes while they use secure Paystack checkout.
+5. Use the live prep list and next-drop waitlist to make the next batch easier
+   to sell.
 
-- **📊 Dashboard** - View real-time statistics and metrics with live data updates via Convex subscriptions
-- **🤖 AI Playground** - Interactive AI playground featuring:
-  - Streaming text generation with Cloudflare Workers AI
-  - Structured output generation (JSON, markdown, etc.)
-  - Web scraping and content extraction with Firecrawl
-  - Gateway diagnostics and request monitoring
-  - Usage metering with Autumn billing integration (10 free messages, then upgrade prompts)
-- **👥 Admin Dashboard** - Full admin interface with:
-  - User management (view, edit, delete users)
-  - System statistics and analytics
-  - Data management tools
-- **👤 Profile** - User profile management and settings
+## Why this stack is here
 
-## ✨ What's Included
+- **Convex** stores chef drops, reservations, paid orders, and waitlists, then
+  pushes capacity updates to the public page in real time.
+- **Cloudflare Durable Objects** own the hot inventory counter for each drop.
+  This is the concurrency boundary that prevents a social-media rush from
+  overselling a limited batch.
+- **Paystack** creates the hosted checkout and sends a signed `charge.success`
+  webhook. The webhook is verified with Paystack before it confirms the Durable
+  Object hold and records a paid order in Convex.
+- **Firecrawl** imports public source facts only into a reviewed chef draft. It
+  never publishes or invents a menu on the chef's behalf.
+- **TanStack Start/Router** serves the chef studio and public drop pages.
 
-### 🏗️ **Complete Full-Stack Architecture**
+Cloudflare AI and legacy checkout integrations are intentionally not part of
+the live checkout path. Paystack is the Kenya-first adapter; other-country
+providers can use the provider-neutral reservation and order records later.
 
-- **File-based routing** with TanStack Router for intuitive page organization
-- **Server functions** for type-safe API endpoints and data fetching
-- **Progressive enhancement** - works without JavaScript, enhances with it
-- **Parallel data loading** with route loaders and Convex real-time queries
-
-### 🔐 **Authentication & Authorization**
-
-- **Better Auth integration** with secure session management
-- **Role-based access control** (Admin/User permissions)
-- **Route guards** for protected pages and server functions
-- **Audit logging** for complete action tracking
-- **Password reset** and email verification flows
-
-### 🎨 **Modern UI & UX**
-
-- **shadcn/ui components** - 20+ pre-built, accessible UI primitives
-- **TailwindCSS** for responsive, utility-first styling
-- **Dark/Light mode** support ready
-- **Form handling** with TanStack React Form and Zod validation
-- **Loading states** and error boundaries for smooth UX
-
-### 🗄️ **Database & Data Management**
-
-- **Convex** for real-time, serverless database operations
-- **Type-safe queries and mutations** with automatic client generation
-- **Real-time subscriptions** for live data updates
-- **Automatic scaling** and global distribution
-- **Integrated authentication** with Better Auth
-
-### 🚀 **Developer Experience**
-
-- **End-to-end type safety** from database to UI
-- **Hot reloading** and fast development server
-- **Biome** for lightning-fast linting and formatting
-- **Performance monitoring** hooks for development insights
-- **Automatic cache management** with Convex real-time subscriptions
-
-### 📧 **Production Features**
-
-- **Email integration** with Resend for transactional emails
-- **Error monitoring** with Sentry integration (optional)
-- **Performance monitoring** and session replay
-- **SEO optimization** utilities
-- **Export functionality** for data management
-- **Virtualized components** for handling large datasets
-
-### ☁️ **Deployment Ready**
-
-- **One-click deployment** to Netlify with database provisioning
-- **Environment management** with secure secret handling
-- **Build optimization** for production performance
-- **Automatic SSL** and CDN through Netlify
-
-## 🚀 Setup Guide
-
-### ⚡ Quick Start (Local Development)
-
-1. **[Create your repository](https://github.com/new?template_name=tanstack-start-template&template_owner=dyeoman2)** from this template
-
-2. **Clone your new repository**:
-
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-   cd YOUR_REPO_NAME
-   ```
-
-3. **Run the automated setup**:
-
-   ```bash
-   pnpm run setup:dev
-   ```
-
-This automated script will guide you through local development setup, including:
-
-- Interactive Convex project creation
-- Development environment configuration (URLs and environment variables)
-- Automatic startup of both development servers simultaneously in the current terminal!
-
-### 🚀 Quick Start (Production)
-
-**Automated Production Setup** (Recommended):
+## Local setup
 
 ```bash
-# After completing local development setup
-pnpm run setup:prod
+pnpm install
+npx convex dev
+pnpm dev
 ```
 
-**What happens automatically:**
-
-- ✅ Checks for git remote repository
-- ✅ Deploys Convex functions to production
-- ✅ Provides step-by-step Netlify deployment instructions
-- ✅ Pre-fills environment variables for easy copying
-- ✅ Guides you through connecting your existing repository
-
-**🎉 Result:** Your app will be live with authentication, database, and real-time features!
-
-### 🔗 Link Your Local Project to Netlify (Optional)
-
-After deploying, link your local project to Netlify for easier management:
+Copy `.env.example` to `.env.local` and populate the non-secret development
+values. Put backend secrets in the Convex environment for the deployment that
+runs the functions:
 
 ```bash
-# Link your local project to the deployed Netlify site
-npx netlify link
-
-# This allows you to:
-# - Deploy updates with `npx netlify deploy --prod`
-# - View build logs locally
-# - Manage environment variables from CLI
+npx convex env set PAYSTACK_SECRET_KEY <secret-key>
+npx convex env set PAYSTACK_CURRENCY KES
+npx convex env set CLOUDFLARE_WORKER_URL <worker-url>
+npx convex env set CLOUDFLARE_WORKER_TOKEN <worker-token>
+npx convex env set FIRECRAWL_API_KEY <key>
 ```
 
-## 📄 Third Party Services Setup
+Paystack checkout does not require a separate provider product for every chef
+or drop. Firesales initializes a payment for the held batch amount in KES and
+records the Paystack reference against that reservation.
 
-In order to send password reset and transactional emails, you need to set up Resend. In order to monitor errors and performance, you need to set up Sentry. For AI functionality, you need to set up Cloudflare Workers AI. To meter usage and offer paid upgrades after the 10 free messages, you need to set up Autumn. For web scraping and content extraction in the AI playground, you can set up Firecrawl. These are optional, but recommended for production.
+## Deploy the inventory worker
 
-- [Resend Setup Guide](docs/RESEND_SETUP.md) - Password reset and transactional email configuration
-- [Sentry Setup](./docs/SENTRY_SETUP.md) - Error monitoring and performance tracking
-- [Cloudflare AI Setup](docs/CLOUDFLARE_AI_SETUP.md) - AI inference and gateway configuration
-- [Autumn Billing Setup](docs/AUTUMN_SETUP.md) - Usage metering and upgrade flow for AI messaging
-- [Firecrawl Setup](docs/FIRECRAWL_SETUP.md) - Web scraping and content extraction for AI playground
+The worker lives in `cloudflare-worker/`. Configure a strong
+`CLOUDFLARE_WORKER_TOKEN` as a Cloudflare Worker secret, deploy the worker, and
+set the resulting URL plus the same token in Convex. The Durable Object class
+is already declared in `cloudflare-worker/wrangler.toml`.
 
-- [CodeRabbit CLI Setup](docs/CODERABBIT_CLI_SETUP.md) - AI-powered code review assistance
+## Configure Paystack
 
-### 🗂️ **Optional Infrastructure Setup**
+1. Create a Paystack test integration and put its secret key in
+   `PAYSTACK_SECRET_KEY`. Use a live key only after your Paystack account and
+   payment channels are approved.
+2. Enable the checkout methods you want in Paystack—typically cards and M-Pesa
+   for a Kenya launch.
+3. Add the Convex HTTP endpoint
+   `https://<your-deployment>.convex.site/webhooks/paystack` to Paystack's
+   webhook settings. Paystack signs it with the same secret key.
+4. Run a test checkout and verify that a paid guest appears in the chef's prep
+   list.
 
-The template includes pre-configured infrastructure for file storage using AWS S3, but this is **not currently implemented** in the application. If you need document or file upload functionality, the infrastructure is ready to leverage:
+For automatic chef settlement, create and verify a Paystack subaccount for the
+chef, then associate its code with the chef profile. Without one, funds settle
+to the Firesales platform account. Confirm food-sales eligibility, refund
+policy, tax responsibilities, and the chef payout agreement before going live.
 
-- [AWS S3 Storage Setup](infra/README.md) - Document and file storage infrastructure (ready but not implemented)
+## Firecrawl source research
 
-## 📄 License
+See [the Firecrawl setup guide](docs/FIRECRAWL_SETUP.md). The chef studio gives
+each chef three complimentary source imports, then continues to support manual
+drop creation without a Firecrawl key or credit.
 
-MIT License - See `LICENSE` file for details.
+## Verification
+
+```bash
+pnpm typecheck
+pnpm build
+```

@@ -52,7 +52,12 @@ export function getRouter() {
       context: {
         queryClient,
         convexQueryClient,
-      } satisfies { queryClient: QueryClient; convexQueryClient: ConvexQueryClient },
+        isAuthenticated: false,
+      } satisfies {
+        queryClient: QueryClient;
+        convexQueryClient: ConvexQueryClient;
+        isAuthenticated: boolean;
+      },
       defaultPreload: 'intent',
       defaultPreloadStaleTime: 30_000,
       defaultPreloadGcTime: 5 * 60_000,

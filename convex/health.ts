@@ -25,7 +25,7 @@ export const healthCheck = httpAction(async (ctx, _request) => {
           userCount: userCountResult.totalUsers,
         },
         service: {
-          name: 'TanStack Start Template',
+          name: 'Firesales',
           version: '1.0.0',
         },
       }),
@@ -50,7 +50,7 @@ export const healthCheck = httpAction(async (ctx, _request) => {
           provider: 'convex',
         },
         service: {
-          name: 'TanStack Start Template',
+          name: 'Firesales',
           version: '1.0.0',
         },
       }),
